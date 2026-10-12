@@ -10,9 +10,51 @@ This is a command-line tool: you run it in Terminal or Command Prompt. It opens 
 playlist-importer playlist.csv --name "My discoveries"
 ```
 
-[Install](#1-install-the-tool) · [Set up Google](#2-set-up-google-access) · [First import](#3-import-your-first-playlist) · [Use it again](#using-it-again) · [Troubleshooting](#troubleshooting)
+[Short setup](#short-setup-two-install-commands) · [Step-by-step install](#1-install-the-tool) · [Set up Google](#2-set-up-google-access) · [First import](#3-import-your-first-playlist) · [Use it again](#using-it-again) · [Troubleshooting](#troubleshooting)
 
 > **Verification status:** Automated tests and offline previews pass. Google sign-in and playlist creation have not yet been tested with a real account.
+
+## Short setup: two install commands
+
+With **Python 3.11+ and Git already installed**, you can install in two commands and import in one. This route skips manually cloning a project folder and activating its environment. The longer walkthrough below is an alternative; you do not need to do both.
+
+**Repository access:** This repository is currently private. Your Git client must already be signed in with a GitHub account that has access. A `Repository not found` error can mean you are not signed in or have not been granted access.
+
+### macOS/Linux
+
+Run these two commands once in Terminal:
+
+```sh
+python3 -m venv "$HOME/.playlistimporter-venv"
+"$HOME/.playlistimporter-venv/bin/python" -m pip install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+```
+
+Complete [Google setup steps A–C](#a-create-a-project-and-enable-youtube) once. Leave the downloaded Desktop client JSON in Downloads, renamed `client_secret.json`. Download a SideTrack **CSV** to Downloads and rename it `playlist.csv`. Then import:
+
+```sh
+"$HOME/.playlistimporter-venv/bin/playlist-importer" "$HOME/Downloads/playlist.csv" --client-secrets "$HOME/Downloads/client_secret.json" --name "My discoveries"
+```
+
+### Windows — Command Prompt
+
+Run these two commands once in **Command Prompt**:
+
+```bat
+py -3 -m venv "%USERPROFILE%\.playlistimporter-venv"
+"%USERPROFILE%\.playlistimporter-venv\Scripts\python.exe" -m pip install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+```
+
+Complete [Google setup steps A–C](#a-create-a-project-and-enable-youtube) once. Leave the downloaded Desktop client JSON in Downloads, renamed `client_secret.json`. Download a SideTrack **CSV** to Downloads and rename it `playlist.csv`. Then import:
+
+```bat
+"%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" "%USERPROFILE%\Downloads\playlist.csv" --client-secrets "%USERPROFILE%\Downloads\client_secret.json" --name "My discoveries"
+```
+
+**Next time, run only the import command**, changing the CSV path and playlist name as needed. It works in a fresh terminal without changing folders or activating anything. Keep `--client-secrets` on future imports: the tool reads that file each time but does not copy it. If you move it to another private location, update the path. This flag replaces the credential-copy commands in step 2D.
+
+Add `--dry-run` to the import command for an offline preview before signing in. For a real import, finish sign-in in the browser and wait for **`Done. Added ...`** in the terminal before treating the playlist as complete. Google setup is still required; a shorter install does not remove it.
+
+The later combining, resume, and logout examples use the short command name `playlist-importer`. With this installation, replace it with the full executable path shown above; keep your CSV paths and `--client-secrets` where applicable. No project folder or example CSV is created by this installation.
 
 ## Before you start
 
