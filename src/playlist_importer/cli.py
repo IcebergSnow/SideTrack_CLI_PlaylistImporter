@@ -38,10 +38,10 @@ def parser() -> argparse.ArgumentParser:
 
 
 def resume_command(args, identifier: str) -> str:
-    command = ["playlist-importer", *(str(path) for path in args.files), "--playlist", identifier,
-               "--config-dir", str(args.config_dir)]
+    command = [sys.executable, "-m", "playlist_importer", *(str(path.expanduser().resolve()) for path in args.files),
+               "--playlist", identifier, "--config-dir", str(args.config_dir.expanduser().resolve())]
     if args.client_secrets:
-        command.extend(["--client-secrets", str(args.client_secrets)])
+        command.extend(["--client-secrets", str(args.client_secrets.expanduser().resolve())])
     return subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
 
 

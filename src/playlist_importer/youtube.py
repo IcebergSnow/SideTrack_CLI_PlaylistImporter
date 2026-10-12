@@ -16,6 +16,7 @@ ERRORS = {
     "playlistItemsNotAccessible": "The signed-in YouTube channel cannot add songs to this playlist.",
     "playlistForbidden": "The signed-in YouTube channel cannot access this playlist.",
     "playlistNotFound": "The playlist wasn't found or isn't accessible to the signed-in channel.",
+    "videoAlreadyInPlaylist": "YouTube reports this video is already in the playlist. Wait briefly, then resume into the same playlist to check existing videos.",
     "videoNotFound": "YouTube couldn't find this video. It may have been removed or made private.",
     "playlistContainsMaximumNumberOfVideos": "This playlist has reached YouTube's video limit.",
     "maxPlaylistExceeded": "The channel has reached YouTube's playlist creation limit.",
@@ -53,10 +54,15 @@ class YouTube:
             details = error.get("errors", []) if isinstance(error, dict) else []
             reasons = [detail.get("reason") for detail in details if isinstance(detail, dict)] if isinstance(details, list) else []
             for reason in reasons:
-                if reason in ERRORS:
+                if isinstance(reason, str) and reason in ERRORS:
                     raise ImporterError(ERRORS[reason])
             if response.status_code == 401:
                 raise ImporterError("Google rejected the login. Run again with --reauth.")
+            if response.status_code == 409:
+                raise ImporterError(
+                    "YouTube reported a conflict (HTTP 409). Wait briefly, then resume into the same playlist "
+                    "using the printed command. Existing videos will be checked before adding more."
+                )
             raise ImporterError(f"YouTube API returned HTTP {response.status_code}. Check access and quota; a failed write may need reconciliation before retrying.")
         if not data:
             raise ImporterError("YouTube returned an invalid response. A write may have succeeded; check the playlist before retrying.")

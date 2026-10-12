@@ -1,3 +1,7 @@
+import os
+import shlex
+import subprocess
+import sys
 from unittest.mock import Mock
 
 import pytest
@@ -112,3 +116,16 @@ def test_empty_resume_makes_no_writes(csv_file, fake_youtube):
     assert cli.main([str(csv_file), "--playlist", PLAYLIST]) == 0
     fake_youtube.add_video.assert_not_called()
     fake_youtube.create_playlist.assert_not_called()
+
+
+def test_resume_command_works_without_activation_or_original_directory(monkeypatch, csv_file, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    args = cli.parser().parse_args([
+        csv_file.name, "--config-dir", "private login", "--client-secrets", "Google keys/client.json", "--reauth",
+    ])
+    expected = [
+        sys.executable, "-m", "playlist_importer", str(csv_file), "--playlist", PLAYLIST,
+        "--config-dir", str(tmp_path / "private login"), "--client-secrets", str(tmp_path / "Google keys/client.json"),
+    ]
+    escaped = subprocess.list2cmdline(expected) if os.name == "nt" else shlex.join(expected)
+    assert cli.resume_command(args, PLAYLIST) == escaped

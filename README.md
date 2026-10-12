@@ -12,7 +12,7 @@ playlist-importer playlist.csv --name "My discoveries"
 
 [Short setup](#short-setup-two-install-commands) · [Step-by-step install](#1-install-the-tool) · [Set up Google](#2-set-up-google-access) · [First import](#3-import-your-first-playlist) · [Use it again](#using-it-again) · [Troubleshooting](#troubleshooting)
 
-> **Verification status:** Automated tests and offline previews pass. Google sign-in and playlist creation have not yet been tested with a real account.
+> **Verification status:** A real-account Google sign-in, private playlist creation, and 40-video import have been verified, including recovery from HTTP 409 conflicts. The final playlist contained all 40 unique videos in CSV order.
 
 ## Short setup: two install commands
 
@@ -54,7 +54,7 @@ Complete [Google setup steps A–C](#a-create-a-project-and-enable-youtube) once
 
 Add `--dry-run` to the import command for an offline preview before signing in. For a real import, finish sign-in in the browser and wait for **`Done. Added ...`** in the terminal before treating the playlist as complete. Google setup is still required; a shorter install does not remove it.
 
-The later combining, resume, and logout examples use the short command name `playlist-importer`. With this installation, replace it with the full executable path shown above; keep your CSV paths and `--client-secrets` where applicable. No project folder or example CSV is created by this installation.
+The later examples use the short command name `playlist-importer`. With this installation, replace that name with the full executable path shown above; keep your CSV paths and `--client-secrets` where applicable. The resume command printed by version 0.1.1 and newer already includes the full Python path and absolute file paths, so you can copy it unchanged into a fresh terminal. No project folder or example CSV is created by this installation.
 
 ## Before you start
 
@@ -239,7 +239,9 @@ The tool processes files in the order you list them and keeps the first occurren
 
 ### Resume an interrupted import
 
-Copy the **resume command printed by the tool**. It supplies the original files and destination playlist. It looks like this; replace `YOUR_PLAYLIST_ID` with the ID from your real link:
+Copy the **resume command printed by the tool**. It supplies the installed Python path, original files, credentials path, and destination playlist, so it works from a fresh terminal without activation or changing folders. Wait briefly before resuming after a conflict: a just-added video may take time to appear in playlist reads.
+
+If you are using an activated environment, the equivalent command looks like this; replace `YOUR_PLAYLIST_ID` with the ID from your real link:
 
 ```sh
 playlist-importer playlist.csv --playlist "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
@@ -283,6 +285,7 @@ To revoke Google's authorization as well, remove the app under [Google account c
 | Sign-in expires, times out, or selects the wrong channel | Use `--reauth` and finish browser sign-in on the same computer within three minutes. If a partial playlist already exists, also include `--playlist` to resume it. |
 | No YouTube channel was found | Open YouTube with that Google account and create a channel, or use `--reauth` to select the correct account/channel. |
 | API is not enabled | Enable **YouTube Data API v3** in the same Google Cloud project that issued your client JSON. |
+| HTTP 409 / conflict | Wait briefly, then run the printed resume command. It checks the existing playlist before adding missing videos. The tool stops on a conflict instead of automatically repeating an uncertain write. |
 | Quota is exhausted | Keep the playlist URL and resume after the daily reset; see the limits below. |
 | Import stopped on a video | The error identifies its video ID. Check whether it still exists and is accessible. Remove a permanently unavailable row, then resume into the existing playlist. |
 
@@ -395,6 +398,8 @@ python -m build
 
 The automated tests cover CSV parsing, duplicate removal, OAuth setup, token handling, API requests, and recovery from partial failures. CI runs on macOS, Windows, and Linux. Test doubles are confined to tests; the running tool always uses Google's API for real imports.
 
-**Live Google sign-in and playlist creation have not yet been verified with a real account.** They require your own credentials and consent. For a small first check, import `examples/playlist.csv`, open the resulting private two-song playlist, and check its order. Rerun with `--playlist` and confirm that zero new videos are added. A dry run or passing unit test does not prove that Google authorization or export has succeeded.
+**Live verification on October 12, 2026:** Google sign-in and private playlist creation succeeded with a real account. Two HTTP 409 interruptions were recovered by checking the saved playlist and resuming. An API read confirmed exactly 40 unique videos in the same order as the input CSV, with private visibility. This verifies that flow for one account; it does not guarantee every video or account will work.
+
+For your own small first check, import `examples/playlist.csv`, open the resulting private two-song playlist, and check its order. Rerun with `--playlist` and confirm that zero new videos are added. A dry run or passing unit test alone does not prove that Google authorization or export has succeeded.
 
 </details>

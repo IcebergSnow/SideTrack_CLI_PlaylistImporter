@@ -71,3 +71,21 @@ def test_different_owner_is_rejected():
     api = api_with((200, {"items": [{"snippet": {"channelId": "someone-else"}}]}))
     with pytest.raises(ImporterError, match="owned"):
         api.existing_playlist("playlist", "me")
+
+
+@pytest.mark.parametrize("reason", ["conflict", None, {"unexpected": "value"}])
+def test_conflict_preserves_playlist_and_requires_reconciliation(reason):
+    api = api_with((409, {"error": {"message": "sensitive-test-token", "errors": [{"reason": reason}]}}))
+    with pytest.raises(ImporterError, match="conflict.*409") as error:
+        api.add_video("playlist", "video")
+    assert "resume into the same playlist" in str(error.value)
+    assert "sensitive-test-token" not in str(error.value)
+    assert "quota" not in str(error.value)
+    assert api.session.request.call_count == 1
+
+
+def test_duplicate_response_requires_checking_existing_videos():
+    api = api_with((409, {"error": {"errors": [{"reason": "videoAlreadyInPlaylist"}]}}))
+    with pytest.raises(ImporterError, match="already in the playlist"):
+        api.add_video("playlist", "video")
+    assert api.session.request.call_count == 1
