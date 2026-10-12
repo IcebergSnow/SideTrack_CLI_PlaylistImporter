@@ -8,8 +8,6 @@ The importer runs in **Terminal on macOS/Linux** or **Command Prompt on Windows*
 
 [Install](#1-install-the-tool) · [Google setup](#2-set-up-google-access) · [First import](#3-import-your-first-playlist) · [Fix Google 403](#google-blocked-sign-in-error-403-access_denied) · [Recovery](#automatic-conflict-recovery) · [Troubleshooting](#troubleshooting)
 
-> **Verified:** Google sign-in and a real 40-video private playlist import, including manual recovery from interrupted writes and the final video order. Version 0.1.2 adds automatic recovery, covered by automated tests; a live conflict has not yet been observed with that version.
-
 ## Before you start
 
 You need:
@@ -17,7 +15,7 @@ You need:
 - **Python 3.11 or newer:** [download Python](https://www.python.org/downloads/). Check with `python3 --version` on macOS/Linux or `py -3 --version` on Windows.
 - **Git:** [install Git](https://git-scm.com/downloads). Check with `git --version`.
 - **A Google account with a YouTube channel**, an internet connection, and a browser on the computer running the importer.
-- **Access to this GitHub repository.** It is currently private. Your Git client must authenticate as a GitHub user with access; signing into the website alone may not be enough. Follow [GitHub's Git sign-in instructions](https://docs.github.com/en/get-started/git-basics/caching-your-github-credentials-in-git) if installation reports `Repository not found` or an authentication failure.
+- **Access to this GitHub repository.** If GitHub requests authentication, sign in through Git with an account that has repository access. Follow [GitHub's Git sign-in instructions](https://docs.github.com/en/get-started/git-basics/caching-your-github-credentials-in-git) if installation reports `Repository not found` or an authentication failure.
 
 Google setup is separate from GitHub access. Each person supplies their own Google Desktop OAuth client; this repository does not bundle a shared client.
 
@@ -67,13 +65,13 @@ The check should print `PlaylistImporter 0.1.2` or a newer version. Leave `$HOME
 
 Do this once in your browser. **OAuth** is Google's process for asking you to grant account access. You enter your Google password on Google's website.
 
-Use **the same Google Cloud project throughout this section**. The project identifies your importer to Google; it does not host the importer or connect it to Vercel.
+Use **the same Google Cloud project throughout this section**. The project identifies your importer to Google. The importer runs on your computer.
 
 ### A. Create a project and enable YouTube
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/) and sign in.
 2. Click the project selector near the top, then **New project**.
-3. Name it `SideTrack Personal`, create it, and select it in the project selector. You can also use an existing project.
+3. Name it `Playlist Importer`, create it, and select it in the project selector. You can also use an existing project.
 4. Open **APIs & Services → Library**. Search for **YouTube Data API v3**, open it, and click **Enable**.
 
 YouTube requires the API to be enabled in the project used by your credentials. [Google's setup guide](https://developers.google.com/youtube/v3/getting-started)
@@ -84,7 +82,7 @@ Find **Google Auth Platform** in the console menu or search bar. If it is not co
 
 | Field | What to enter |
 | --- | --- |
-| App name | `SideTrack Personal` |
+| App name | `Playlist Importer` |
 | User support email | Your email |
 | Audience | **External** for a personal Google account |
 | Contact email | Your email |
@@ -104,7 +102,7 @@ https://www.googleapis.com/auth/youtube
 
 This is a permission string for Google's scope selector, **not a terminal command**. The importer uses this broad YouTube permission to read your channel and playlist, create a playlist, and add videos. [Google's consent-screen instructions](https://developers.google.com/workspace/guides/configure-oauth-consent)
 
-#### Why is it tester-only?
+#### Testing mode and sign-in expiry
 
 This walkthrough uses Google's **Testing** mode for the first setup. Only accounts you explicitly add can authorize the app, and this YouTube authorization normally expires after seven days. Add yourself even when you own the project. [Google's audience rules](https://support.google.com/cloud/answer/15549945?hl=en)
 
@@ -118,9 +116,9 @@ You do not need to complete public-app verification for this personal test. Goog
 4. Open **Downloads** in Finder or File Explorer. Find the downloaded file, usually named `client_secret` followed by a long identifier.
 5. Rename it to **`client_secret.json`** and leave it in Downloads. Keep the `.json` extension exactly once.
 
-Select Desktop app for this importer. It does not use a Web application client, API key, or service account. No Vercel address or manual redirect URI is needed. [Google's Desktop client instructions](https://developers.google.com/workspace/guides/create-credentials#desktop-app)
+Select Desktop app for this importer. It does not use a Web application client, API key, or service account. No manual redirect URI is needed. [Google's Desktop client instructions](https://developers.google.com/workspace/guides/create-credentials#desktop-app)
 
-You do not need to open or edit the JSON. Keep it private; do not commit it to Git or paste its contents into chat. The import commands below read it from Downloads using `--client-secrets`, so no extra credential-copy commands are needed.
+Keep the JSON file private and unchanged. The import commands below read it from Downloads using `--client-secrets`.
 
 ## 3. Import your first playlist
 
@@ -232,11 +230,11 @@ Files are processed in argument order. Repeated video IDs are removed, keeping t
 
 ### Automatic conflict recovery
 
-Version **0.1.2** handles HTTP 409 conflicts during song insertion automatically, with no extra flag. It waits **5, 10, then 20 seconds** across up to three recovery rounds per song. Before repeating an insertion, it reads the playlist twice, with two seconds between checks. If the song is already saved, it continues without adding it again. If YouTube explicitly reports a duplicate, it only checks for the saved song and does not repeat the insertion.
+If YouTube reports an HTTP 409 conflict while adding a song, the importer waits, checks whether the song was saved, and retries when appropriate. Leave the terminal open. Recovery stops after three rounds per song if the conflict persists, and the tool prints a command to resume the same playlist.
 
-There are at most **three extra insertion attempts per song**. Persistent conflicts or unreliable playlist reads stop recovery and leave a manual resume command. Login problems, exhausted quota, unavailable videos, connection failures, and other server errors still require manual recovery. Playlist creation is never retried automatically.
+Login problems, exhausted quota, unavailable videos, connection failures, and other server errors require the action shown in the error message before resuming. Automatic recovery does not restart a closed terminal.
 
-Recovery runs only while the command is open; it cannot restart a closed terminal. Reads and repeated insertions use additional API quota beyond the initial estimate. Checks reduce duplicate risk, but delayed YouTube updates or simultaneous edits cannot provide an exact-once guarantee.
+Recovery uses additional API quota. Avoid running two imports into the same playlist at once; delayed YouTube updates or simultaneous edits can still cause duplicates.
 
 ### Resume an interrupted import
 
@@ -335,7 +333,6 @@ For the main installation in this guide, run the command for your operating syst
 
 Use the `--version` check from step 1 afterward. See the optional reference for updating a Git checkout or pipx installation.
 
-
 ## Daily import limits
 
 Google counts API usage in **quota units**, not songs. Creating a playlist costs 50 units; each video added costs another 50. A typical new project has 10,000 units per day for these operations, with a reset at midnight Pacific Time. Reading your channel and playlist uses a little more. See [Google's quota table](https://developers.google.com/youtube/v3/determine_quota_cost).
@@ -372,7 +369,7 @@ The default saved-login folder is:
 
 This is an alternative to the main two-command installation. Use it if you want the source code and example CSVs on your computer. Do not run both installation methods unless you intend to maintain two copies.
 
-**Already installed in a checkout?** Open a terminal in its actual folder and run only the activation line below. If you cloned it before the repository was renamed, its local folder may still be named `PlaylistImporter`. Use that existing folder; the repository rename does not move it.
+**Already installed in a checkout?** Open a terminal in the folder where you cloned the repository and run only the activation line below.
 
 **New checkout — macOS/Linux:**
 
@@ -457,27 +454,5 @@ python -m pip install .
 ```
 
 For pipx, use `pipx upgrade playlistimporter`.
-
-</details>
-
-<details>
-<summary>Development and verification</summary>
-
-From the repository folder in an activated environment:
-
-```sh
-python -m pip install -e ".[dev]"
-python -m pytest -q
-playlist-importer examples/playlist.csv --dry-run
-python -m build
-```
-
-The automated tests cover CSV parsing, duplicate removal, OAuth setup, token handling, API requests, and recovery from partial failures. CI runs on macOS, Windows, and Linux. Test doubles are confined to tests; the running tool always uses Google's API for real imports.
-
-**Live verification on October 12, 2026:** Google sign-in and private playlist creation succeeded with a real account. Two HTTP 409 interruptions were recovered manually by checking the saved playlist and resuming, before automatic recovery was added. An API read confirmed exactly 40 unique videos in the same order as the input CSV, with private visibility. This verifies that flow for one account; it does not guarantee every video or account will work.
-
-Automatic recovery is covered by tests for delayed playlist reads, repeated conflicts, duplicate responses, unreadable playlists, permanent failures, and cancellation. A live HTTP 409 has not yet been observed with the new automatic recovery version.
-
-For your own small first check, import `examples/playlist.csv`, open the resulting private two-song playlist, and check its order. Rerun with `--playlist` and confirm that zero new videos are added. A dry run or passing unit test alone does not prove that Google authorization or export has succeeded.
 
 </details>
