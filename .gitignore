@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.env
+.env.*
+!.env.example
+client*.json
+credentials*.json
+token*.json
+.playlistimporter/
+.DS_Store
