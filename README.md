@@ -2,7 +2,7 @@
 
 Turn a [SideTrack](https://side-track.vercel.app/) CSV download into a **private YouTube playlist** from your own computer.
 
-This is a command-line tool: you run it in Terminal or Command Prompt. It opens Google sign-in when needed, adds the exact YouTube videos from your file in order, and gives you a playlist link. You can also combine several CSVs or finish an interrupted import.
+This is a command-line tool: you run it in Terminal or Command Prompt. It opens Google sign-in when needed, adds the exact YouTube videos from your file in order, and gives you a playlist link. It automatically recovers from temporary playlist conflicts while running. You can also combine several CSVs or finish an interrupted import.
 
 **First-time setup requires your own Google Cloud project and Desktop OAuth credentials.** The steps below explain how to create them. After setup, importing looks like this:
 
@@ -201,6 +201,8 @@ The two files you will use have different purposes:
 7. Return to the terminal. It shows the selected channel, a playlist link, and progress such as `[1/20] Added ...`.
 8. Wait for **`Done. Added ...`**, then open the playlist link and check the songs and privacy setting.
 
+**Keep the terminal open during automatic recovery.** If YouTube returns a temporary playlist conflict, the importer pauses, checks which videos were saved, and continues when it can. No extra flag is needed.
+
 **A playlist link appears before all songs are added.** If you see an error instead of `Done`, keep the link and follow [Resume an interrupted import](#resume-an-interrupted-import). The partial playlist is kept.
 
 The tool creates a **private YouTube playlist**. Some videos may not appear or play in YouTube Music even when they work on regular YouTube.
@@ -236,6 +238,14 @@ playlist-importer page-1.csv page-2.csv another-list.csv --name "Combined discov
 ```
 
 The tool processes files in the order you list them and keeps the first occurrence of each video ID. Different videos of the same song are treated as different IDs; there is no title matching.
+
+### Automatic conflict recovery
+
+Version **0.1.2** handles HTTP 409 conflicts during song insertion automatically. It waits **5, 10, then 20 seconds** across up to three recovery rounds per song. Before repeating an insertion, it reads the playlist twice, with two seconds between those checks. If the song is already there, it continues without adding it again. If YouTube explicitly reports a duplicate, it only checks for the saved song; it does not repeat that insertion.
+
+There are at most **three extra insertion attempts per song**. Recovery stops if the conflict persists or the playlist cannot be read reliably, leaving the playlist and a manual resume command. Login problems, exhausted quota, unavailable videos, connection failures, and other server errors still require manual recovery. Playlist creation is never retried automatically.
+
+This works while the command is running; it does not restart a closed terminal or a stopped process. Press **Control+C** to cancel. Recovery reads and repeated insertions can use additional API quota beyond the initial estimate. Checks reduce duplicate risk, but delayed YouTube updates or simultaneous edits cannot provide an exact-once guarantee.
 
 ### Resume an interrupted import
 
@@ -285,7 +295,7 @@ To revoke Google's authorization as well, remove the app under [Google account c
 | Sign-in expires, times out, or selects the wrong channel | Use `--reauth` and finish browser sign-in on the same computer within three minutes. If a partial playlist already exists, also include `--playlist` to resume it. |
 | No YouTube channel was found | Open YouTube with that Google account and create a channel, or use `--reauth` to select the correct account/channel. |
 | API is not enabled | Enable **YouTube Data API v3** in the same Google Cloud project that issued your client JSON. |
-| HTTP 409 / conflict | Wait briefly, then run the printed resume command. It checks the existing playlist before adding missing videos. The tool stops on a conflict instead of automatically repeating an uncertain write. |
+| HTTP 409 / conflict | Leave the terminal open while automatic recovery checks the playlist. If it stops after three rounds, wait before running the printed resume command. |
 | Quota is exhausted | Keep the playlist URL and resume after the daily reset; see the limits below. |
 | Import stopped on a video | The error identifies its video ID. Check whether it still exists and is accessible. Remove a permanently unavailable row, then resume into the existing playlist. |
 
@@ -371,7 +381,7 @@ YouTube watch, Music, short-link, shorts, embed and live video URLs are accepted
 
 The playlist URL goes to stdout. Sign-in instructions and progress go to stderr. Exit codes are `0` for success, `1` for API/auth/file-system errors, `2` for invalid input or usage, and `130` for cancellation. A printed playlist URL alone does not mean the import completed.
 
-The tool stops at the first import error. It does not automatically retry a write after a connection/server failure, because Google may already have completed it. Resuming checks the destination first to avoid adding the same IDs again.
+Song insertion conflicts use the bounded automatic recovery described above. Other errors, or exhausted recovery attempts, stop the import and preserve a resume command. Connection failures and other server errors are not automatically retried because Google may already have completed the write. Manual resuming checks the destination before adding more videos.
 
 To update a Git installation, open the project folder, activate `.venv`, then run:
 
@@ -398,7 +408,9 @@ python -m build
 
 The automated tests cover CSV parsing, duplicate removal, OAuth setup, token handling, API requests, and recovery from partial failures. CI runs on macOS, Windows, and Linux. Test doubles are confined to tests; the running tool always uses Google's API for real imports.
 
-**Live verification on October 12, 2026:** Google sign-in and private playlist creation succeeded with a real account. Two HTTP 409 interruptions were recovered by checking the saved playlist and resuming. An API read confirmed exactly 40 unique videos in the same order as the input CSV, with private visibility. This verifies that flow for one account; it does not guarantee every video or account will work.
+**Live verification on October 12, 2026:** Google sign-in and private playlist creation succeeded with a real account. Two HTTP 409 interruptions were recovered manually by checking the saved playlist and resuming, before automatic recovery was added. An API read confirmed exactly 40 unique videos in the same order as the input CSV, with private visibility. This verifies that flow for one account; it does not guarantee every video or account will work.
+
+Automatic recovery is covered by tests for delayed playlist reads, repeated conflicts, duplicate responses, unreadable playlists, permanent failures, and cancellation. A live HTTP 409 has not yet been observed with the new automatic recovery version.
 
 For your own small first check, import `examples/playlist.csv`, open the resulting private two-song playlist, and check its order. Rerun with `--playlist` and confirm that zero new videos are added. A dry run or passing unit test alone does not prove that Google authorization or export has succeeded.
 

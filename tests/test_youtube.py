@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from playlist_importer.errors import ImporterError
+from playlist_importer.errors import ImporterError, PlaylistConflict
 from playlist_importer.youtube import API_ROOT, YouTube
 
 
@@ -76,7 +76,7 @@ def test_different_owner_is_rejected():
 @pytest.mark.parametrize("reason", ["conflict", None, {"unexpected": "value"}])
 def test_conflict_preserves_playlist_and_requires_reconciliation(reason):
     api = api_with((409, {"error": {"message": "sensitive-test-token", "errors": [{"reason": reason}]}}))
-    with pytest.raises(ImporterError, match="conflict.*409") as error:
+    with pytest.raises(PlaylistConflict, match="conflict.*409") as error:
         api.add_video("playlist", "video")
     assert "resume into the same playlist" in str(error.value)
     assert "sensitive-test-token" not in str(error.value)
@@ -86,6 +86,35 @@ def test_conflict_preserves_playlist_and_requires_reconciliation(reason):
 
 def test_duplicate_response_requires_checking_existing_videos():
     api = api_with((409, {"error": {"errors": [{"reason": "videoAlreadyInPlaylist"}]}}))
-    with pytest.raises(ImporterError, match="already in the playlist"):
+    with pytest.raises(PlaylistConflict, match="already in the playlist") as error:
         api.add_video("playlist", "video")
+    assert error.value.reported_duplicate
     assert api.session.request.call_count == 1
+
+
+@pytest.mark.parametrize("item", [{}, {"contentDetails": None}, {"contentDetails": {}}, {"contentDetails": {"videoId": []}}, {"contentDetails": {"videoId": ""}}])
+def test_incomplete_playlist_items_prevent_unsafe_reconciliation(item):
+    api = api_with((200, {"items": [item]}))
+    with pytest.raises(ImporterError, match="could not be verified"):
+        api.video_ids("playlist")
+
+
+@pytest.mark.parametrize("token", [[], 0, {}])
+def test_invalid_next_page_token_cannot_hide_saved_videos(token):
+    api = api_with((200, {"items": [], "nextPageToken": token}))
+    with pytest.raises(ImporterError, match="page token"):
+        api.video_ids("playlist")
+
+
+def test_explicit_quota_reason_is_not_treated_as_retryable_conflict():
+    api = api_with((409, {"error": {"errors": [{"reason": "quotaExceeded"}]}}))
+    with pytest.raises(ImporterError, match="quota") as error:
+        api.add_video("playlist", "video")
+    assert not isinstance(error.value, PlaylistConflict)
+
+
+def test_generic_duplicate_conflict_is_read_only_recovery():
+    api = api_with((409, {"error": {"errors": [{"reason": "duplicate"}]}}))
+    with pytest.raises(PlaylistConflict) as error:
+        api.add_video("playlist", "video")
+    assert error.value.reported_duplicate

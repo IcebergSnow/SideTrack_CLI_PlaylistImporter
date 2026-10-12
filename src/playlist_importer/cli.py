@@ -3,14 +3,18 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 import unicodedata
 from pathlib import Path
 
 from . import __version__
 from .auth import authenticate, logout
-from .errors import ImporterError, InputError
+from .errors import ImporterError, InputError, PlaylistConflict
 from .files import playlist_id, read_csvs
 from .youtube import YouTube
+
+CONFLICT_DELAYS = (5, 10, 20)
+RECHECK_DELAY = 2
 
 
 def safe_text(value: str) -> str:
@@ -43,6 +47,43 @@ def resume_command(args, identifier: str) -> str:
     if args.client_secrets:
         command.extend(["--client-secrets", str(args.client_secrets.expanduser().resolve())])
     return subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
+
+
+def add_with_recovery(youtube: YouTube, identifier: str, video_id: str) -> bool:
+    """Return False when a read confirms the video and no repeat write is needed."""
+    try:
+        youtube.add_video(identifier, video_id)
+        return True
+    except PlaylistConflict as exc:
+        conflict = exc
+
+    for attempt, delay in enumerate(CONFLICT_DELAYS, 1):
+        progress(f"YouTube conflict for {video_id}. Automatic recovery {attempt}/{len(CONFLICT_DELAYS)}: waiting {delay}s, then checking the playlist.")
+        time.sleep(delay)
+        # Reads can lag behind successful writes. Require two separated checks
+        # before retrying an absent video; never repeat a reported duplicate.
+        for check in range(2):
+            if check:
+                time.sleep(RECHECK_DELAY)
+            try:
+                saved = youtube.video_ids(identifier)
+            except ImporterError as exc:
+                raise ImporterError(f"Automatic recovery couldn't verify the playlist. Stopped before another insertion. {exc}") from exc
+            if video_id in saved:
+                progress(f"Confirmed {video_id} is already saved; continuing without another insertion.")
+                return False
+        if conflict.reported_duplicate:
+            continue
+        progress(f"Video {video_id} was absent from both checks; retrying insertion ({attempt}/{len(CONFLICT_DELAYS)}).")
+        try:
+            youtube.add_video(identifier, video_id)
+            return True
+        except PlaylistConflict as exc:
+            conflict = exc
+    raise ImporterError(
+        f"Automatic conflict recovery stopped after {len(CONFLICT_DELAYS)} rounds. "
+        "The playlist was kept. Wait before using the printed resume command."
+    ) from conflict
 
 
 def run(args) -> int:
@@ -97,18 +138,23 @@ def run(args) -> int:
         print(f"https://www.youtube.com/playlist?list={identifier}", flush=True)
         progress(f"To resume safely using the same CSVs: {resume_command(args, identifier)}")
         added = 0
+        recovered = 0
         try:
             for track in pending:
                 try:
-                    youtube.add_video(identifier, track.video_id)
+                    inserted = add_with_recovery(youtube, identifier, track.video_id)
                 except ImporterError as exc:
                     raise ImporterError(f"Couldn't confirm video {track.video_id} ({track.title or 'untitled'}): {exc}") from exc
-                added += 1
-                progress(f"[{added}/{len(pending)}] Added {track.video_id}: {track.title or track.video_id}")
+                if inserted:
+                    added += 1
+                else:
+                    recovered += 1
+                action = "Added" if inserted else "Already saved"
+                progress(f"[{added + recovered}/{len(pending)}] {action} {track.video_id}: {track.title or track.video_id}")
         except (ImporterError, KeyboardInterrupt):
-            progress(f"Stopped after {added} confirmed additions of {len(pending)} planned. The playlist was kept. Resume with the command above; existing videos will be skipped.")
+            progress(f"Stopped after {added + recovered} confirmed additions of {len(pending)} planned. The playlist was kept. Resume with the command above; existing videos will be skipped.")
             raise
-        progress(f"Done. Added {added} videos; skipped {len(source.tracks) - len(pending)} already present.")
+        progress(f"Done. Added {added} videos; skipped {len(source.tracks) - len(pending) + recovered} already present.")
         return 0
     finally:
         youtube.close()

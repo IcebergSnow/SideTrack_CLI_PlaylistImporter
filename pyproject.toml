@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "playlistimporter"
-version = "0.1.1"
+version = "0.1.2"
 description = "Import SideTrack CSV files into a private YouTube playlist from your computer."
 readme = "README.md"
 requires-python = ">=3.11"

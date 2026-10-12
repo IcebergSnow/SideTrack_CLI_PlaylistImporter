@@ -1,10 +1,10 @@
-"""Small wrapper around the official YouTube Data API; no write retries."""
+"""Official YouTube API requests; conflict recovery is coordinated by the CLI."""
 
 import requests
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import AuthorizedSession
 
-from .errors import ImporterError
+from .errors import ImporterError, PlaylistConflict
 
 API_ROOT = "https://www.googleapis.com/youtube/v3/"
 ERRORS = {
@@ -54,14 +54,17 @@ class YouTube:
             details = error.get("errors", []) if isinstance(error, dict) else []
             reasons = [detail.get("reason") for detail in details if isinstance(detail, dict)] if isinstance(details, list) else []
             for reason in reasons:
+                if reason == "videoAlreadyInPlaylist":
+                    raise PlaylistConflict(ERRORS[reason], reported_duplicate=True)
                 if isinstance(reason, str) and reason in ERRORS:
                     raise ImporterError(ERRORS[reason])
             if response.status_code == 401:
                 raise ImporterError("Google rejected the login. Run again with --reauth.")
             if response.status_code == 409:
-                raise ImporterError(
+                raise PlaylistConflict(
                     "YouTube reported a conflict (HTTP 409). Wait briefly, then resume into the same playlist "
-                    "using the printed command. Existing videos will be checked before adding more."
+                    "using the printed command. Existing videos will be checked before adding more.",
+                    reported_duplicate="duplicate" in reasons,
                 )
             raise ImporterError(f"YouTube API returned HTTP {response.status_code}. Check access and quota; a failed write may need reconciliation before retrying.")
         if not data:
@@ -113,12 +116,16 @@ class YouTube:
                 params["pageToken"] = page_token
             result = self.request("GET", "playlistItems", params=params)
             for item in self.items(result):
-                video = item.get("contentDetails", {}).get("videoId")
-                if video:
-                    ids.add(video)
+                details = item.get("contentDetails")
+                video = details.get("videoId") if isinstance(details, dict) else None
+                if not isinstance(video, str) or not video:
+                    raise ImporterError("YouTube returned a playlist item without a video ID. Stopped because saved videos could not be verified.")
+                ids.add(video)
             page_token = result.get("nextPageToken")
-            if not page_token:
+            if page_token is None or page_token == "":
                 return ids
+            if not isinstance(page_token, str):
+                raise ImporterError("YouTube returned an invalid playlist page token. Stopped before adding any songs.")
             if page_token in seen_tokens or len(seen_tokens) >= 200:
                 raise ImporterError("YouTube returned unexpected playlist pagination. Stopped before adding any songs.")
             seen_tokens.add(page_token)
