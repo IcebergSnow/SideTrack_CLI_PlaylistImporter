@@ -13,8 +13,8 @@ Python 3.11+ and a desktop web browser are required. This is a local CLI, with n
 ## Install
 
 ```sh
-git clone https://github.com/IcebergSnow/PlaylistImporter.git
-cd PlaylistImporter
+git clone https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+cd SideTrack_CLI_PlaylistImporter
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install .
@@ -26,7 +26,7 @@ On Windows, use `py -3 -m venv .venv`, then `.venv\Scripts\Activate.ps1` in Powe
 If you already use pipx, you can instead install from GitHub:
 
 ```sh
-pipx install git+https://github.com/IcebergSnow/PlaylistImporter.git
+pipx install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
 ```
 
 `sidetrack-import` is an alias for the same command. `python -m playlist_importer` also works in the installed environment.

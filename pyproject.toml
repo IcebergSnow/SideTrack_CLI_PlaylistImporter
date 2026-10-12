@@ -22,7 +22,7 @@ playlist-importer = "playlist_importer.cli:main"
 sidetrack-import = "playlist_importer.cli:main"
 
 [project.urls]
-Repository = "https://github.com/IcebergSnow/PlaylistImporter"
+Repository = "https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter"
 
 [tool.setuptools.packages.find]
 where = ["src"]
