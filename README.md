@@ -1,312 +1,340 @@
 # SideTrack Playlist Importer
 
-Turn a [SideTrack](https://side-track.vercel.app/) CSV download into a **private YouTube playlist** from your own computer.
+Turn a [SideTrack](https://side-track.vercel.app/) CSV download into a **private YouTube playlist** on your own account.
 
-This is a command-line tool: you run it in Terminal or Command Prompt. It opens Google sign-in when needed, adds the exact YouTube videos from your file in order, and gives you a playlist link. It automatically recovers from temporary playlist conflicts while running. You can also combine several CSVs or finish an interrupted import.
+The importer runs in **Terminal on macOS/Linux** or **Command Prompt on Windows**. You give it a file of songs, complete Google sign-in in your browser, and receive a playlist link. It adds the exact YouTube video IDs from the file; it does not download audio.
 
-**First-time setup requires your own Google Cloud project and Desktop OAuth credentials.** The steps below explain how to create them. After setup, importing looks like this:
+**First time:** install the tool → set up Google access → download a SideTrack CSV → preview → import. **Later:** download another CSV and run the import command again.
 
-```sh
-playlist-importer playlist.csv --name "My discoveries"
-```
+[Install](#1-install-the-tool) · [Google setup](#2-set-up-google-access) · [First import](#3-import-your-first-playlist) · [Fix Google 403](#google-blocked-sign-in-error-403-access_denied) · [Recovery](#automatic-conflict-recovery) · [Troubleshooting](#troubleshooting)
 
-[Short setup](#short-setup-two-install-commands) · [Step-by-step install](#1-install-the-tool) · [Set up Google](#2-set-up-google-access) · [First import](#3-import-your-first-playlist) · [Use it again](#using-it-again) · [Troubleshooting](#troubleshooting)
-
-> **Verification status:** A real-account Google sign-in, private playlist creation, and 40-video import have been verified, including recovery from HTTP 409 conflicts. The final playlist contained all 40 unique videos in CSV order.
-
-## Short setup: two install commands
-
-With **Python 3.11+ and Git already installed**, you can install in two commands and import in one. This route skips manually cloning a project folder and activating its environment. The longer walkthrough below is an alternative; you do not need to do both.
-
-**Repository access:** This repository is currently private. Your Git client must already be signed in with a GitHub account that has access. A `Repository not found` error can mean you are not signed in or have not been granted access.
-
-### macOS/Linux
-
-Run these two commands once in Terminal:
-
-```sh
-python3 -m venv "$HOME/.playlistimporter-venv"
-"$HOME/.playlistimporter-venv/bin/python" -m pip install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
-```
-
-Complete [Google setup steps A–C](#a-create-a-project-and-enable-youtube) once. Leave the downloaded Desktop client JSON in Downloads, renamed `client_secret.json`. Download a SideTrack **CSV** to Downloads and rename it `playlist.csv`. Then import:
-
-```sh
-"$HOME/.playlistimporter-venv/bin/playlist-importer" "$HOME/Downloads/playlist.csv" --client-secrets "$HOME/Downloads/client_secret.json" --name "My discoveries"
-```
-
-### Windows — Command Prompt
-
-Run these two commands once in **Command Prompt**:
-
-```bat
-py -3 -m venv "%USERPROFILE%\.playlistimporter-venv"
-"%USERPROFILE%\.playlistimporter-venv\Scripts\python.exe" -m pip install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
-```
-
-Complete [Google setup steps A–C](#a-create-a-project-and-enable-youtube) once. Leave the downloaded Desktop client JSON in Downloads, renamed `client_secret.json`. Download a SideTrack **CSV** to Downloads and rename it `playlist.csv`. Then import:
-
-```bat
-"%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" "%USERPROFILE%\Downloads\playlist.csv" --client-secrets "%USERPROFILE%\Downloads\client_secret.json" --name "My discoveries"
-```
-
-**Next time, run only the import command**, changing the CSV path and playlist name as needed. It works in a fresh terminal without changing folders or activating anything. Keep `--client-secrets` on future imports: the tool reads that file each time but does not copy it. If you move it to another private location, update the path. This flag replaces the credential-copy commands in step 2D.
-
-Add `--dry-run` to the import command for an offline preview before signing in. For a real import, finish sign-in in the browser and wait for **`Done. Added ...`** in the terminal before treating the playlist as complete. Google setup is still required; a shorter install does not remove it.
-
-The later examples use the short command name `playlist-importer`. With this installation, replace that name with the full executable path shown above; keep your CSV paths and `--client-secrets` where applicable. The resume command printed by version 0.1.1 and newer already includes the full Python path and absolute file paths, so you can copy it unchanged into a fresh terminal. No project folder or example CSV is created by this installation.
+> **Verified:** Google sign-in and a real 40-video private playlist import, including manual recovery from interrupted writes and the final video order. Version 0.1.2 adds automatic recovery, covered by automated tests; a live conflict has not yet been observed with that version.
 
 ## Before you start
 
 You need:
 
 - **Python 3.11 or newer:** [download Python](https://www.python.org/downloads/). Check with `python3 --version` on macOS/Linux or `py -3 --version` on Windows.
-- **Git:** [install Git](https://git-scm.com/downloads) if `git --version` is not recognized.
-- **A Google account with a YouTube channel**, an internet connection, and a web browser on the computer running the tool. An account that has never created a YouTube channel may need to do that on YouTube first.
-- **A CSV export from SideTrack.** Choose **CSV**, not TXT. CSV contains the video links this tool needs; SideTrack TXT files only contain song names.
+- **Git:** [install Git](https://git-scm.com/downloads). Check with `git --version`.
+- **A Google account with a YouTube channel**, an internet connection, and a browser on the computer running the importer.
+- **Access to this GitHub repository.** It is currently private. Your Git client must authenticate as a GitHub user with access; signing into the website alone may not be enough. Follow [GitHub's Git sign-in instructions](https://docs.github.com/en/get-started/git-basics/caching-your-github-credentials-in-git) if installation reports `Repository not found` or an authentication failure.
 
-Start with one page of 20 songs. Large imports can run into Google's daily API limit; [see the examples below](#daily-import-limits).
+Google setup is separate from GitHub access. Each person supplies their own Google Desktop OAuth client; this repository does not bundle a shared client.
+
+<a id="short-setup-two-install-commands"></a>
 
 ## 1. Install the tool
 
-Choose the instructions for your operating system. These commands download the project into your home folder and install it in a separate Python environment called `.venv`.
+Choose **one** operating-system block below. With the prerequisites above ready, installation takes two commands. Run the first, wait for it to finish, then run the second. Continue only if both finish without an error.
 
-Already cloned the repository? Open its existing folder and start at the `venv` command instead.
+This installs into a dedicated folder named `.playlistimporter-venv` inside your home folder. The later commands use its full path, so **you do not need to change folders or activate an environment**. It does not create a source-code checkout or download the example CSVs.
 
-### macOS or Linux — Terminal
+Already installed from a cloned repository or with pipx? Use the [existing-installation instructions](#other-installation-methods) instead of creating a second installation.
+
+### macOS/Linux
+
+On a Mac, press **Command + Space**, type **Terminal**, and press Return. On Linux, open your terminal application.
 
 ```sh
-cd ~
-git clone https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
-cd SideTrack_CLI_PlaylistImporter
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install .
+python3 -m venv "$HOME/.playlistimporter-venv"
+"$HOME/.playlistimporter-venv/bin/python" -m pip install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+```
+
+Optional installation check:
+
+```sh
+"$HOME/.playlistimporter-venv/bin/playlist-importer" --version
 ```
 
 ### Windows — Command Prompt
 
-Open **Command Prompt** from the Start menu. Use these commands there; the activation command is different in PowerShell.
+Open Start, search for **Command Prompt**, and open it. These commands use Command Prompt syntax; use that application for this walkthrough.
 
 ```bat
-cd /d "%USERPROFILE%"
-git clone https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
-cd SideTrack_CLI_PlaylistImporter
-py -3 -m venv .venv
-.venv\Scripts\activate.bat
-python -m pip install .
+py -3 -m venv "%USERPROFILE%\.playlistimporter-venv"
+"%USERPROFILE%\.playlistimporter-venv\Scripts\python.exe" -m pip install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
 ```
 
-Keep this terminal open for the remaining steps. An activated environment usually shows `(.venv)` at the start of the prompt.
+Optional installation check:
 
-### Check that installation worked
-
-Run the included two-song example in **dry-run** mode:
-
-```sh
-playlist-importer examples/playlist.csv --dry-run
+```bat
+"%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" --version
 ```
 
-You should see `Loaded 2 unique videos`, the two video IDs, and `Dry run complete`. This checks the file locally. It does **not** sign in, contact Google, or create a playlist, so you can try it before setting up Google access.
+The check should print `PlaylistImporter 0.1.2` or a newer version. Leave `$HOME` or `%USERPROFILE%` unchanged: your shell expands it to your home folder automatically.
 
 ## 2. Set up Google access
 
-Google requires permission before a program can create playlists in your account. **OAuth** is the browser sign-in process that grants that permission. You enter your Google password on Google's website, not in this tool.
+Do this once in your browser. **OAuth** is Google's process for asking you to grant account access. You enter your Google password on Google's website.
 
-Use the same Google Cloud project for all the steps in this section. Each person using the importer needs their own setup; this repository does not bundle a shared Google client.
+Use **the same Google Cloud project throughout this section**. The project identifies your importer to Google; it does not host the importer or connect it to Vercel.
 
 ### A. Create a project and enable YouTube
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/) and sign in.
-2. Use the project selector at the top to create a project, such as **SideTrack Personal**, or select an existing project.
-3. Open **APIs & Services → Library**, search for **YouTube Data API v3**, and click **Enable**.
+2. Click the project selector near the top, then **New project**.
+3. Name it `SideTrack Personal`, create it, and select it in the project selector. You can also use an existing project.
+4. Open **APIs & Services → Library**. Search for **YouTube Data API v3**, open it, and click **Enable**.
+
+YouTube requires the API to be enabled in the project used by your credentials. [Google's setup guide](https://developers.google.com/youtube/v3/getting-started)
 
 ### B. Set up the consent screen
 
-Open **Google Auth Platform**. If it is not configured, click **Get started**. Fill in the setup screens using these settings:
+Find **Google Auth Platform** in the console menu or search bar. If it is not configured, click **Get started** and enter:
 
-| Setting | What to use |
+| Field | What to enter |
 | --- | --- |
-| App name | `SideTrack Playlist Importer` |
-| User support email | Your email address |
+| App name | `SideTrack Personal` |
+| User support email | Your email |
 | Audience | **External** for a personal Google account |
-| Contact email | Your email address |
+| Contact email | Your email |
 
-Review Google's terms and finish setup. In **Audience**, keep the app in **Testing** and add the Google account you will import into under **Test users**.
+Review the terms and finish setup. Then **add your own account as a test user**:
 
-In **Data Access → Add or remove scopes**, add this permission, then save:
+1. Open **Audience** and keep the publishing status as **Testing**.
+2. Find **Test users**, then click **Add users**.
+3. Enter the **exact Google email you will choose during YouTube sign-in**.
+4. Click **Save** and confirm that the email appears in the list.
+
+Next open **Data Access → Add or remove scopes**. Find or manually add this permission, then update/save:
 
 ```text
 https://www.googleapis.com/auth/youtube
 ```
 
-This is a permission string to paste into Google's scope selector, not a terminal command. Google describes it as broad YouTube account access. The importer uses it to read your channel/playlist, create a playlist, and add videos. [Google's consent-screen guide](https://developers.google.com/workspace/guides/configure-oauth-consent) covers these settings.
+This is a permission string for Google's scope selector, **not a terminal command**. The importer uses this broad YouTube permission to read your channel and playlist, create a playlist, and add videos. [Google's consent-screen instructions](https://developers.google.com/workspace/guides/configure-oauth-consent)
+
+#### Why is it tester-only?
+
+This walkthrough uses Google's **Testing** mode for the first setup. Only accounts you explicitly add can authorize the app, and this YouTube authorization normally expires after seven days. Add yourself even when you own the project. [Google's audience rules](https://support.google.com/cloud/answer/15549945?hl=en)
+
+You do not need to complete public-app verification for this personal test. Google provides a [personal-use verification exception](https://support.google.com/cloud/answer/13464323?hl=en). Changing the publishing status to **In production** removes the tester-list restriction, but does not automatically verify the app; warnings and user limits can still apply. You can leave it in Testing for this walkthrough.
 
 ### C. Download your Desktop app credentials
 
 1. Open **Google Auth Platform → Clients → Create client**.
-2. Choose **Desktop app** and give it a name, such as **PlaylistImporter desktop**.
-3. Create the client and download its JSON file.
-4. In your Downloads folder, rename the downloaded file to **`client_secret.json`**. Keep the `.json` extension exactly once.
+2. Choose **Desktop app** and name it `SideTrack Importer`.
+3. Click **Create**, then download the client's **JSON** file.
+4. Open **Downloads** in Finder or File Explorer. Find the downloaded file, usually named `client_secret` followed by a long identifier.
+5. Rename it to **`client_secret.json`** and leave it in Downloads. Keep the `.json` extension exactly once.
 
-Choose **Desktop app**, not Web application. You do not need a Vercel URL or a manually configured redirect URI. The tool receives the sign-in response through a temporary local address on your computer. See [Google's Desktop client instructions](https://developers.google.com/workspace/guides/create-credentials#desktop-app).
+Select Desktop app for this importer. It does not use a Web application client, API key, or service account. No Vercel address or manual redirect URI is needed. [Google's Desktop client instructions](https://developers.google.com/workspace/guides/create-credentials#desktop-app)
 
-### D. Save the credentials where the tool expects them
+You do not need to open or edit the JSON. Keep it private; do not commit it to Git or paste its contents into chat. The import commands below read it from Downloads using `--client-secrets`, so no extra credential-copy commands are needed.
 
-These commands assume you renamed the file and left it in **Downloads**. If you saved it elsewhere, change the source path before running the copy command.
+## 3. Import your first playlist
+
+### A. Download the songs
+
+1. Open [SideTrack](https://side-track.vercel.app/).
+2. Paste a YouTube music link and click **Generate**.
+3. Choose **Current page** for a small first import, or **Everything through this page** to combine the pages you have reached.
+4. Click **CSV**. TXT downloads do not contain the video IDs the importer needs.
+5. Find the downloaded CSV in Downloads and rename it **`playlist.csv`**. Leave it in Downloads.
+
+On a Mac, select a file in Finder and press Return to rename it. On Windows, use the file's Rename action. Check the full filename so you do not end up with `.json.json` or `.csv.csv`.
+
+You should now have two different files:
+
+| File in Downloads | Where it came from | Purpose |
+| --- | --- | --- |
+| `client_secret.json` | Google Cloud | Identifies your Google OAuth client; keep it for future imports. |
+| `playlist.csv` | SideTrack | Contains this playlist's songs; use a new CSV for the next import. |
+
+If your browser saved either file somewhere else, move it to Downloads for this walkthrough or change the corresponding path in the commands.
+
+### B. Preview without creating anything
+
+Return to Terminal or Command Prompt. Copy the block for your operating system and press Return/Enter.
 
 **macOS/Linux:**
 
 ```sh
-mkdir -p "$HOME/.playlistimporter"
-chmod 700 "$HOME/.playlistimporter"
-cp "$HOME/Downloads/client_secret.json" "$HOME/.playlistimporter/client_secret.json"
-chmod 600 "$HOME/.playlistimporter/client_secret.json"
+"$HOME/.playlistimporter-venv/bin/playlist-importer" "$HOME/Downloads/playlist.csv" --dry-run
 ```
 
-**Windows Command Prompt:**
+**Windows — Command Prompt:**
 
 ```bat
-mkdir "%USERPROFILE%\.playlistimporter"
-copy "%USERPROFILE%\Downloads\client_secret.json" "%USERPROFILE%\.playlistimporter\client_secret.json"
+"%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" "%USERPROFILE%\Downloads\playlist.csv" --dry-run
 ```
 
-If Windows says the directory already exists, continue with the copy command. Keep this folder within your own user profile and private to your account.
+You should see your song list, a count such as `Loaded 20 unique videos`, and `Dry run complete`. Check the count before continuing. A dry run reads your CSV locally; it does not sign in, contact Google, or create a playlist, so you can also try it before doing the Google setup.
 
-The two files you will use have different purposes:
+### C. Start the actual import
 
-| File | Where it comes from | What it does |
-| --- | --- | --- |
-| `client_secret.json` | Google Cloud | Identifies your Desktop OAuth client; keep it locally for future imports. |
-| `playlist.csv` | SideTrack | Lists the songs to import; you can download a new one whenever you like. |
+Copy the **entire block**, then press Return/Enter. The backslashes in the macOS/Linux block make it one command spread over several lines. Keep the quotes; they allow paths and playlist names with spaces.
 
-## 3. Import your first playlist
+**macOS/Linux:**
 
-1. Open [SideTrack](https://side-track.vercel.app/), generate recommendations, and choose **Current page** or **Everything through this page**.
-2. Click **CSV** and find the downloaded file.
-3. For this walkthrough, copy it into the project folder and rename it **`playlist.csv`**. This avoids having to type a long Downloads path.
-4. Preview it in your still-open terminal:
+```sh
+"$HOME/.playlistimporter-venv/bin/playlist-importer" \
+  "$HOME/Downloads/playlist.csv" \
+  --client-secrets "$HOME/Downloads/client_secret.json" \
+  --name "My SideTrack playlist"
+```
 
-   ```sh
-   playlist-importer playlist.csv --dry-run
-   ```
+**Windows — Command Prompt:**
 
-5. If the song count looks right, start the import:
+```bat
+"%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" "%USERPROFILE%\Downloads\playlist.csv" --client-secrets "%USERPROFILE%\Downloads\client_secret.json" --name "My SideTrack playlist"
+```
 
-   ```sh
-   playlist-importer playlist.csv --name "My discoveries"
-   ```
+| Command part | What it does |
+| --- | --- |
+| Full path ending in `playlist-importer` or `playlist-importer.exe` | Starts the installed tool. |
+| Path ending in `playlist.csv` | Chooses the songs. |
+| `--client-secrets` and its path | Selects the Google configuration file. Keep this argument on future imports with this setup. |
+| `--name "My SideTrack playlist"` | Names the new private playlist. Change the text inside the quotes if you like. |
 
-6. Complete Google sign-in in the browser on the **same computer**. Choose the intended Google account and YouTube channel, and review the requested permission. The tool waits up to three minutes for this step.
-7. Return to the terminal. It shows the selected channel, a playlist link, and progress such as `[1/20] Added ...`.
-8. Wait for **`Done. Added ...`**, then open the playlist link and check the songs and privacy setting.
+### D. Sign in and wait for completion
 
-**Keep the terminal open during automatic recovery.** If YouTube returns a temporary playlist conflict, the importer pauses, checks which videos were saved, and continues when it can. No extra flag is needed.
+1. Your browser opens Google sign-in. Choose the **same email you added as a test user** and the intended YouTube channel if asked.
+2. Review the requested access and complete sign-in on the **same computer**, within three minutes. If you get `Error 403: access_denied`, follow the [specific fix below](#google-blocked-sign-in-error-403-access_denied).
+3. When the browser tells you to return to the terminal, do so. The browser's sign-in confirmation is not the end of the import.
+4. Check the displayed YouTube channel. The tool prints a playlist URL and progress such as `[1/20] Added ...`.
+5. Wait for **`Done. Added ...`**, then open the playlist URL. If your terminal does not make it clickable, copy it into your browser.
 
-**A playlist link appears before all songs are added.** If you see an error instead of `Done`, keep the link and follow [Resume an interrupted import](#resume-an-interrupted-import). The partial playlist is kept.
+**The playlist URL appears before all the songs have been added.** A URL alone does not mean the import finished. If the importer stops with an error, keep that URL and use its printed resume command.
 
-The tool creates a **private YouTube playlist**. Some videos may not appear or play in YouTube Music even when they work on regular YouTube.
+During automatic recovery, leave the terminal open and let the command finish. It may say it is waiting or checking the playlist. Do not start a second copy of the import while it is still running. Press **Control+C** if you want to stop it.
+
+The new playlist is **private**. Some videos may be available on regular YouTube but unavailable in YouTube Music.
 
 ## Using it again
 
-You do not need to reinstall or create a Google client for each playlist. Open the project folder and activate its environment whenever you open a new terminal.
+Download the next CSV, preview it if you like, and rerun the command from [step 3C](#c-start-the-actual-import). Replace the CSV filename and playlist name as needed. You can use a fresh terminal from any folder; no reinstall or activation is required with the main installation above.
 
-**macOS/Linux**, if you installed in your home folder as above:
+Keep `client_secret.json` for future imports. If you move it to another private location, update the `--client-secrets` path. The tool saves your Google login locally, but still needs that client file. It will request sign-in again when necessary; an expired saved login may require `--reauth`.
 
-```sh
-cd ~/SideTrack_CLI_PlaylistImporter
-source .venv/bin/activate
-```
-
-**Windows Command Prompt:**
-
-```bat
-cd /d "%USERPROFILE%\SideTrack_CLI_PlaylistImporter"
-.venv\Scripts\activate.bat
-```
-
-Use your actual project path if you installed somewhere else. Then run an import command with your latest CSV. Quote any file path that contains spaces:
-
-```sh
-playlist-importer "my playlist.csv" --name "Weekend music"
-```
+**Each run with `--name` creates a new playlist.** To finish an interrupted playlist or append more songs to it, use `--playlist` instead, as described below.
 
 ### Combine multiple CSVs
 
+Save two downloads in Downloads as `page-1.csv` and `page-2.csv`. Pass both file paths in one import command:
+
+**macOS/Linux:**
+
 ```sh
-playlist-importer page-1.csv page-2.csv another-list.csv --name "Combined discoveries"
+"$HOME/.playlistimporter-venv/bin/playlist-importer" \
+  "$HOME/Downloads/page-1.csv" "$HOME/Downloads/page-2.csv" \
+  --client-secrets "$HOME/Downloads/client_secret.json" \
+  --name "Combined discoveries"
 ```
 
-The tool processes files in the order you list them and keeps the first occurrence of each video ID. Different videos of the same song are treated as different IDs; there is no title matching.
+**Windows — Command Prompt:**
+
+```bat
+"%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" "%USERPROFILE%\Downloads\page-1.csv" "%USERPROFILE%\Downloads\page-2.csv" --client-secrets "%USERPROFILE%\Downloads\client_secret.json" --name "Combined discoveries"
+```
+
+Files are processed in argument order. Repeated video IDs are removed, keeping their first occurrence. Different videos of the same song are different IDs; the importer does not match titles. SideTrack's **Everything through this page** option can also put several pages into one CSV before downloading.
 
 ### Automatic conflict recovery
 
-Version **0.1.2** handles HTTP 409 conflicts during song insertion automatically. It waits **5, 10, then 20 seconds** across up to three recovery rounds per song. Before repeating an insertion, it reads the playlist twice, with two seconds between those checks. If the song is already there, it continues without adding it again. If YouTube explicitly reports a duplicate, it only checks for the saved song; it does not repeat that insertion.
+Version **0.1.2** handles HTTP 409 conflicts during song insertion automatically, with no extra flag. It waits **5, 10, then 20 seconds** across up to three recovery rounds per song. Before repeating an insertion, it reads the playlist twice, with two seconds between checks. If the song is already saved, it continues without adding it again. If YouTube explicitly reports a duplicate, it only checks for the saved song and does not repeat the insertion.
 
-There are at most **three extra insertion attempts per song**. Recovery stops if the conflict persists or the playlist cannot be read reliably, leaving the playlist and a manual resume command. Login problems, exhausted quota, unavailable videos, connection failures, and other server errors still require manual recovery. Playlist creation is never retried automatically.
+There are at most **three extra insertion attempts per song**. Persistent conflicts or unreliable playlist reads stop recovery and leave a manual resume command. Login problems, exhausted quota, unavailable videos, connection failures, and other server errors still require manual recovery. Playlist creation is never retried automatically.
 
-This works while the command is running; it does not restart a closed terminal or a stopped process. Press **Control+C** to cancel. Recovery reads and repeated insertions can use additional API quota beyond the initial estimate. Checks reduce duplicate risk, but delayed YouTube updates or simultaneous edits cannot provide an exact-once guarantee.
+Recovery runs only while the command is open; it cannot restart a closed terminal. Reads and repeated insertions use additional API quota beyond the initial estimate. Checks reduce duplicate risk, but delayed YouTube updates or simultaneous edits cannot provide an exact-once guarantee.
 
 ### Resume an interrupted import
 
-Copy the **resume command printed by the tool**. It supplies the installed Python path, original files, credentials path, and destination playlist, so it works from a fresh terminal without activation or changing folders. Wait briefly before resuming after a conflict: a just-added video may take time to appear in playlist reads.
+Find the line starting **`To resume safely using the same CSVs:`** in the terminal output. Once the previous command has stopped, copy the command after that label, paste it into Terminal or Command Prompt, and press Return/Enter. After a conflict, wait briefly before doing this.
 
-If you are using an activated environment, the equivalent command looks like this; replace `YOUR_PLAYLIST_ID` with the ID from your real link:
+The printed command includes the installed Python path, `-m playlist_importer`, absolute file paths, and the existing playlist ID. **Copy it unchanged**, even though it looks different from the original import command. It works from a fresh terminal without activation or changing folders. It checks saved videos and adds only missing IDs.
 
-```sh
-playlist-importer playlist.csv --playlist "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+To construct one yourself, take the import command from step 3C and replace `--name "My SideTrack playlist"` with:
+
+```text
+--playlist "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
 ```
 
-Use the same CSV files to finish the import. The tool checks what is already in the playlist and adds only missing video IDs. You can also use `--playlist` with a new CSV to append more songs to a playlist you own. Its existing visibility stays unchanged.
+Replace the example URL with your actual playlist URL. Keep the CSV and `--client-secrets` arguments. You can also use a new CSV with `--playlist` to append songs to a playlist you own; its visibility stays unchanged.
 
-**Running without `--playlist` creates another playlist.** Avoid importing to or editing the same destination in two places at once; the duplicate check does not lock the playlist against other writers.
+If a video is permanently unavailable, remove its row from the CSV and resume. If creation failed before a playlist URL appeared, check your YouTube library before creating another playlist: the server may have created it even though the response was lost.
 
-If a video is permanently unavailable, remove its row from the CSV and resume. If playlist creation itself failed before a link was printed, check your YouTube library first: the playlist may have been created before the connection failed.
+### Switch accounts, sign in again, or log out
 
-### Switch accounts or sign in again
-
-```sh
-playlist-importer playlist.csv --reauth
-```
-
-This opens Google sign-in again and replaces the saved login. An External Google app in Testing normally needs renewed authorization after seven days because of [Google's token-expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration).
+Add **`--reauth`** to your full import command to open Google sign-in again. If a partial playlist exists, add it to the printed resume command instead, so you keep the destination. Choose the account/channel that owns that playlist. Testing-mode authorization normally expires after seven days; you do not need to recreate the Google project or download a new client file just for that. [Google's expiration rules](https://support.google.com/cloud/answer/15549945?hl=en)
 
 To remove the saved login from this computer:
 
+**macOS/Linux:**
+
 ```sh
-playlist-importer --logout
+"$HOME/.playlistimporter-venv/bin/playlist-importer" --logout
+```
+
+**Windows — Command Prompt:**
+
+```bat
+"%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" --logout
 ```
 
 To revoke Google's authorization as well, remove the app under [Google account connections](https://myaccount.google.com/connections). Logging out does not delete playlists.
+
+## Google blocked sign-in: Error 403 access_denied
+
+If the page says **“has not completed the Google verification process”** and **“can only be accessed by developer-approved testers”**, the signing-in account is not recognized as an approved tester for that OAuth project.
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and select the project that issued your `client_secret.json`.
+2. Open **Google Auth Platform → Audience → Test users → Add users**.
+3. Add the **exact email shown on the blocked page**, click **Save**, and confirm it is listed.
+4. Close the blocked browser tab. Return to the terminal and press **Control+C** if the importer is still waiting.
+5. Rerun the import command and choose that same email. If a playlist was already created, use the resume command instead.
+
+If the email was already listed, check that you edited the same project as the downloaded client file. Adding it to a different project will not fix this. An **unverified-app warning with a continue option** is different from this access block; confirm the app matches your own project before granting access. [Google's tester and publishing rules](https://support.google.com/cloud/answer/15549945?hl=en)
 
 ## Troubleshooting
 
 | What you see | What to do |
 | --- | --- |
 | `python3`, `py`, or `git` is not recognized | Install the missing prerequisite, reopen your terminal, and check its version. Python must be 3.11 or newer. |
-| `playlist-importer` is not found | Open the project folder and activate `.venv` as shown in **Using it again**. If needed, run `python -m pip install .` in that environment. |
-| PowerShell blocks `Activate.ps1` | Use **Command Prompt** with the Windows instructions above. Or, from the project folder in PowerShell, replace `playlist-importer` with `.\.venv\Scripts\playlist-importer.exe`; activation is not required for that form. |
-| The CSV cannot be read | Check the filename and current folder. Use the full file path in quotes, or copy the CSV into the project folder. |
-| Expected a `url` or `video_id` column | Download **CSV** from SideTrack. Renaming a TXT file to `.csv` does not convert its contents. |
-| Couldn't load Google Desktop OAuth credentials | Check that `client_secret.json` is in the location from step 2D and came from a **Desktop app** client. Check for an accidental `.json.json` extension. |
-| Google says access is denied or the user is not allowed | Add the exact Google account under your project's **Audience → Test users**, then try again. A managed work/school account may have additional restrictions. |
-| Google shows an unverified-app notice | Personal test apps may show this. Check that the app name matches the Cloud project you created and that you are a test user. Public distribution has separate [verification requirements](https://developers.google.com/identity/protocols/oauth2/native-app#identify-access-scopes). |
-| `redirect_uri_mismatch` | Check that the client type is **Desktop app**, download its JSON, and try again. A Web application client will not work with this tool. |
-| Sign-in expires, times out, or selects the wrong channel | Use `--reauth` and finish browser sign-in on the same computer within three minutes. If a partial playlist already exists, also include `--playlist` to resume it. |
-| No YouTube channel was found | Open YouTube with that Google account and create a channel, or use `--reauth` to select the correct account/channel. |
-| API is not enabled | Enable **YouTube Data API v3** in the same Google Cloud project that issued your client JSON. |
-| HTTP 409 / conflict | Leave the terminal open while automatic recovery checks the playlist. If it stops after three rounds, wait before running the printed resume command. |
+| `Repository not found` / GitHub authentication failure | Check repository access and [authenticate Git](https://docs.github.com/en/get-started/git-basics/caching-your-github-credentials-in-git). This is separate from Google sign-in. |
+| `playlist-importer` is not found | Use the full executable path shown in this guide. With a cloned-repository install, use [its activation instructions](#other-installation-methods). |
+| Full executable path is not found | Check where you installed the tool. The main walkthrough uses `.playlistimporter-venv` in your home folder; a cloned install uses `.venv` inside its project folder. |
+| Windows rejects the command / PowerShell blocks activation | Open **Command Prompt** and use the Windows block from this guide. The main installation does not require activation. |
+| The CSV cannot be read | Check that it is in Downloads with the exact filename from the command. Quote paths containing spaces. |
+| Expected a `url` or `video_id` column | Download **CSV** from SideTrack. Renaming TXT to CSV does not convert it. |
+| Couldn't load Google Desktop OAuth credentials | Check the `--client-secrets` path and that the JSON came from a **Desktop app** client. Look for `.json.json` or a browser-added filename suffix. |
+| Google blocks access for unapproved testers | Follow the [403 fix](#google-blocked-sign-in-error-403-access_denied). |
+| `redirect_uri_mismatch` | Use a **Desktop app** client and its downloaded JSON. A Web application client will not work. |
+| Sign-in expires, times out, or uses the wrong channel | Add `--reauth` to the import or resume command and complete sign-in within three minutes. |
+| No YouTube channel was found | Open YouTube with that Google account and create a channel, or use `--reauth` to choose the intended account/channel. |
+| API is not enabled | Enable **YouTube Data API v3** in the project that issued the client file. |
+| HTTP 409 / conflict | Let automatic recovery run. If it stops after three rounds, wait before using the printed resume command. Older versions need an [update](#update-the-importer). |
 | Quota is exhausted | Keep the playlist URL and resume after the daily reset; see the limits below. |
-| Import stopped on a video | The error identifies its video ID. Check whether it still exists and is accessible. Remove a permanently unavailable row, then resume into the existing playlist. |
+| Import stopped on a video | Check the video ID reported in the error. If it is permanently unavailable, remove its row and resume. |
+| A playlist URL appeared but the command is still running | Wait for **`Done. Added ...`**. The URL is printed before insertion finishes. |
 
-On macOS/Linux, a `chmod 700` or `chmod 600` error means the local credential folder or token file is accessible to other users. For the default location, apply the appropriate command:
+If the tool reports that the config directory or token must be private, on macOS/Linux you can fix the default locations with:
 
 ```sh
 chmod 700 "$HOME/.playlistimporter"
 chmod 600 "$HOME/.playlistimporter/token.json"
 ```
 
-Run the second command only if `token.json` exists; it is created after a successful login.
+Run the second command only if `token.json` exists. The tool creates it after successful sign-in.
+
+## Update the importer
+
+For the main installation in this guide, run the command for your operating system. Updating keeps your Google client file, saved login, and playlists.
+
+**macOS/Linux:**
+
+```sh
+"$HOME/.playlistimporter-venv/bin/python" -m pip install --upgrade git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+```
+
+**Windows — Command Prompt:**
+
+```bat
+"%USERPROFILE%\.playlistimporter-venv\Scripts\python.exe" -m pip install --upgrade git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+```
+
+Use the `--version` check from step 1 afterward. See the optional reference for updating a Git checkout or pipx installation.
+
 
 ## Daily import limits
 
@@ -318,25 +346,63 @@ Google counts API usage in **quota units**, not songs. Creating a playlist costs
 | 60 songs | 3,050 units |
 | 200 songs | 10,050 units — more than the typical daily allowance |
 
-The CLI reports the estimated write quota, but cannot see what remains in your project. Other imports or apps using that project share its allowance. Check the project's actual quota in Google Cloud. Large imports may need to be resumed on another day.
+These figures exclude recovery attempts and reads. The CLI reports the estimated write quota, but cannot see what remains in your project. Other imports or apps using that project share its allowance. Check the project's actual quota in Google Cloud. Large imports may need to be resumed on another day.
 
 ## Privacy and local files
 
 Google sign-in and API requests go directly between your computer and Google. SideTrack, Vercel, and this repository do not receive your Google password or authorization tokens. The tool uses the official YouTube Data API and does not download audio.
 
-The default credential folder is:
+The default saved-login folder is:
 
 - **macOS/Linux:** `~/.playlistimporter/`
 - **Windows:** `%USERPROFILE%\.playlistimporter\`
 
-`client_secret.json` holds the Google client configuration. `token.json` is created after sign-in and lets the tool reuse that authorization.
+`token.json` is created in that folder after sign-in and lets the tool reuse the authorization. The main walkthrough keeps the separate `client_secret.json` in Downloads and passes its path explicitly. If you omit `--client-secrets` and its environment variable, the tool instead looks for `client_secret.json` inside the saved-login folder.
 
 **The token file is unencrypted.** On macOS/Linux, the tool creates a private folder and restricts token access to your user account. On Windows, protection depends on your user-profile folder permissions. Keep these files out of Git, shared folders, and cloud-synced folders. Someone with access to your account or computer may still be able to read them.
 
 ## Optional reference
 
+<a id="other-installation-methods"></a>
+
 <details>
 <summary>Other installation methods, settings, and supported CSV formats</summary>
+
+### Install from a Git checkout, or use an existing checkout
+
+This is an alternative to the main two-command installation. Use it if you want the source code and example CSVs on your computer. Do not run both installation methods unless you intend to maintain two copies.
+
+**Already installed in a checkout?** Open a terminal in its actual folder and run only the activation line below. If you cloned it before the repository was renamed, its local folder may still be named `PlaylistImporter`. Use that existing folder; the repository rename does not move it.
+
+**New checkout — macOS/Linux:**
+
+```sh
+cd ~
+git clone https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+cd SideTrack_CLI_PlaylistImporter
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+```
+
+**New checkout — Windows Command Prompt:**
+
+```bat
+cd /d "%USERPROFILE%"
+git clone https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
+cd SideTrack_CLI_PlaylistImporter
+py -3 -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install .
+```
+
+After activation, replace the main guide's full executable path with `playlist-importer`. Keep the same Downloads paths and `--client-secrets` argument. In each new terminal, return to your checkout and activate `.venv` again. Alternatively, run the executable by its full path inside that checkout's `.venv/bin` directory (`.venv\Scripts` on Windows), without activation.
+
+You can preview the included two-song file from the checkout folder:
+
+```sh
+playlist-importer examples/playlist.csv --dry-run
+```
 
 ### Install with pipx
 
@@ -346,7 +412,7 @@ If you already use pipx:
 pipx install git+https://github.com/IcebergSnow/SideTrack_CLI_PlaylistImporter.git
 ```
 
-This installs the command without manually activating a project environment. Follow the Google setup steps above and provide the path to your CSV. The pipx installation does not place this repository's example files in your working folder.
+This installs the command without manually activating a project environment. Use `playlist-importer` in place of the main guide's full executable path, keeping the CSV and `--client-secrets` paths. Follow the same Google setup. The pipx installation does not place this repository's example files in your working folder.
 
 ### Command options
 
