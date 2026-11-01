@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "playlistimporter"
-version = "0.1.3"
-description = "Import SideTrack CSV files into a private YouTube playlist from your computer."
+version = "0.1.4"
+description = "Create private YouTube playlists from a song link or SideTrack CSV files."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "google-auth>=2.38,<3",
   "google-auth-oauthlib>=1.2,<2",
   "requests>=2.32,<3",
+  "ytmusicapi==1.12.3",
 ]
 
 [project.optional-dependencies]

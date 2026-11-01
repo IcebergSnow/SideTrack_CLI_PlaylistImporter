@@ -1,10 +1,10 @@
 # SideTrack Playlist Importer
 
-Turn a [SideTrack](https://side-track.vercel.app/) CSV download into a **private YouTube playlist** on your own account.
+Create a **private YouTube playlist** from a YouTube song link or a [SideTrack](https://side-track.vercel.app/) CSV download.
 
-The importer runs in **Terminal on macOS/Linux** or **Command Prompt on Windows**. You give it a file of songs, complete Google sign-in in your browser, and receive a playlist link. It adds the exact YouTube video IDs from the file; it does not download audio.
+The importer runs in **Terminal on macOS/Linux** or **Command Prompt on Windows**. Start from a music link to find similar songs directly, or import an existing CSV. Review the songs, complete Google sign-in if needed, and receive a playlist link. No audio is downloaded.
 
-**First time:** install the tool → set up Google access → download a SideTrack CSV → preview → import. **Later:** download another CSV, start the importer, and choose the file. No renaming needed.
+**First time:** install the tool → set up Google access → choose a song link or CSV → preview → import. **Later:** run `sidetrack` with the [shortcut](#use-a-short-command). The song-link option works without the SideTrack website.
 
 [Install](#1-install-the-tool) · [Google setup](#2-set-up-google-access) · [First import](#3-import-your-first-playlist) · [Fix Google 403](#google-blocked-sign-in-error-403-access_denied) · [Recovery](#automatic-conflict-recovery) · [Troubleshooting](#troubleshooting)
 
@@ -59,7 +59,7 @@ Optional installation check:
 "%USERPROFILE%\.playlistimporter-venv\Scripts\playlist-importer.exe" --version
 ```
 
-The check should print `PlaylistImporter 0.1.3` or a newer version. Leave `$HOME` or `%USERPROFILE%` unchanged: your shell expands it to your home folder automatically.
+The check should print `PlaylistImporter 0.1.4` or a newer version. Leave `$HOME` or `%USERPROFILE%` unchanged: your shell expands it to your home folder automatically.
 
 ## 2. Set up Google access
 
@@ -122,14 +122,22 @@ Keep the JSON file private and unchanged. Interactive mode finds it in Downloads
 
 ## 3. Import your first playlist
 
-### A. Download the songs
+### A. Choose a song link or CSV
 
-1. Open [SideTrack](https://side-track.vercel.app/).
-2. Paste a YouTube music link and click **Generate**.
-3. Choose **Current page** or **Everything through this page**.
-4. Click **CSV** and leave the download in Downloads. **Keep its original filename**, including any browser-added `(1)` or `(2)` suffix. TXT does not contain the video IDs the importer needs.
+There are two ways to choose the music:
 
-You should now have your Google client file, `client_secret.json`, and a song file such as `sidetrack-fJ9rUzIMcZQ-page-1.csv` in Downloads. The Google file is reused for future imports; each CSV contains the songs for one import.
+| Menu option | What to provide | What happens |
+| --- | --- | --- |
+| **1. Start from a song link** | A link to one YouTube or YouTube Music song. | The importer requests similar music directly from YouTube Music, then asks how many songs to include. No website or CSV download is needed. |
+| **2. Import a CSV download** | A CSV from [SideTrack](https://side-track.vercel.app/) or another file with YouTube video links. | Choose the file from recent downloads or enter its path. The importer uses its exact video IDs. |
+
+For option 1, copy a link such as:
+
+```text
+https://music.youtube.com/watch?v=fJ9rUzIMcZQ
+```
+
+For option 2, generate songs on SideTrack, choose **Current page** or **Everything through this page**, and download **CSV**. Keep the original filename, including any `(1)` or `(2)` suffix. TXT does not contain the video IDs the importer needs.
 
 ### B. Preview without creating anything
 
@@ -147,9 +155,12 @@ Open Terminal or Command Prompt and run the block for your operating system:
 "%USERPROFILE%\.playlistimporter-venv\Scripts\sidetrack.exe" --dry-run
 ```
 
-The importer lists recent SideTrack CSV downloads, newest first. **Press Enter for the newest**, type another file's number, or drag/paste a CSV file path. It also recognizes an older download named `playlist.csv`.
+Choose **1** for a song link or **2** for a CSV:
 
-Check the song list and count. `Dry run complete` means the file passed local validation. This preview does not sign in, contact Google, or create a playlist.
+- **Song link:** paste the link. After recommendations succeed, enter the number of songs you want. Press Enter for 20, or all available songs if fewer than 20 were found.
+- **CSV:** press Enter for the newest download, type another file's number, or drag/paste a CSV file path. The recent list also recognizes `playlist.csv`.
+
+Check the song list and count. A CSV dry run is entirely offline. A song-link preview contacts YouTube Music for real recommendations. Neither mode signs into your Google account, creates a playlist, or saves a recovery file.
 
 ### C. Start the actual import
 
@@ -167,10 +178,13 @@ Run the importer without `--dry-run`:
 "%USERPROFILE%\.playlistimporter-venv\Scripts\sidetrack.exe"
 ```
 
-1. Choose a CSV by number, press Enter for the newest, or drag/paste its file path. Type `q` to cancel.
-2. Enter a playlist name, or press Enter to use a name containing the current date and time.
-3. Review the selected file, song preview, count, and playlist name.
-4. Type **`y`** and press Return/Enter to create a private playlist. Pressing Enter without `y` cancels.
+1. Choose **1** for a song link or **2** for a CSV. Type `q` to cancel.
+2. For a link, paste it and wait. If recommendations fail, the importer stops with an error before asking for a count or Google access. If they succeed, choose how many songs to include. For a CSV, choose a recent download or enter its path.
+3. Enter a playlist name, or press Enter to use a name containing the current date and time.
+4. Review the song preview, count, and playlist name.
+5. Type **`y`** and press Return/Enter to create a private playlist. Pressing Enter without `y` cancels.
+
+Link mode offers **up to 200 unique recommendations**, depending on what YouTube Music returns after filtering. The starting song, repeated video IDs, known audio/video counterparts, and obvious duplicate recordings are excluded. Choose a count within the displayed range. This is the importer's limit for one recommendation pool, not YouTube Music's maximum.
 
 The importer checks its saved-login folder for `client_secret.json`, then checks Downloads. If neither location contains it, it asks for the file's path. An explicit `--client-secrets` argument or environment variable takes priority.
 
@@ -192,7 +206,7 @@ The new playlist is **private**. Some videos may be available on regular YouTube
 
 ## Using it again
 
-Download a new CSV and start the importer with the command from [step 3C](#c-start-the-actual-import), or type `sidetrack` if you set up the shortcut below. Pick the file, enter a name, and confirm. There is no need to rename the CSV, reinstall, or repeat Google Cloud setup.
+Start the importer with the command from [step 3C](#c-start-the-actual-import), or type `sidetrack` if you set up the shortcut below. Choose a new song link or CSV, follow the prompts, and confirm. There is no need to rename files, reinstall, or repeat Google Cloud setup.
 
 Keep `client_secret.json` in the saved-login folder or Downloads. If a saved Google login can no longer be refreshed, interactive mode offers to open sign-in again; press Enter to accept. You do not need to remember `--reauth` for that flow.
 
@@ -249,15 +263,17 @@ Recovery uses additional API quota. Avoid running two imports into the same play
 
 Find the line starting **`To resume safely using the same CSVs:`** in the terminal output. Once the previous command has stopped, copy the command after that label, paste it into Terminal or Command Prompt, and press Return/Enter. After a conflict, wait briefly before doing this.
 
+For song-link imports, the tool saves the exact selected songs to a private local CSV before sign-in. The printed resume command uses that saved list, so it does not generate different recommendations. Keep the file until the import is complete.
+
 The printed command includes the installed Python path, `-m playlist_importer`, absolute file paths, and the existing playlist ID. **Copy it unchanged**, even though it looks different from the original import command. It works from a fresh terminal without activation or changing folders. It checks saved videos and adds only missing IDs.
 
-To choose a download interactively and append to an existing playlist, add this option to the start command from step 3C (or to `sidetrack`):
+To choose a song link or CSV interactively and append to an existing playlist, add this option to the start command from step 3C (or to `sidetrack`):
 
 ```text
 --playlist "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
 ```
 
-Replace the example URL with the playlist URL from the interrupted import. Choose the same CSV when prompted. You can also select a new CSV to append songs to a playlist you own; its visibility stays unchanged. For commands with explicit file paths, replace `--name` with `--playlist` and keep the CSV and client arguments.
+Replace the example URL with the playlist URL from the interrupted import. To resume the same songs, choose CSV and enter the original CSV or saved recovery-file path. A new song-link request can produce different results. You can also choose a new link or CSV to append songs to a playlist you own; its visibility stays unchanged. For commands with explicit file paths, replace `--name` with `--playlist` and keep the CSV and client arguments.
 
 If a video is permanently unavailable, remove its row from the CSV and resume. If creation failed before a playlist URL appeared, check your YouTube library before creating another playlist: the server may have created it even though the response was lost.
 
@@ -302,6 +318,9 @@ If the email was already listed, check that you edited the same project as the d
 | `sidetrack` or `playlist-importer` is not found | Use the full executable path shown in this guide. With a cloned-repository install, use [its activation instructions](#other-installation-methods). |
 | Full executable path is not found | Check where you installed the tool. The main walkthrough uses `.playlistimporter-venv` in your home folder; a cloned install uses `.venv` inside its project folder. |
 | Windows rejects the command / PowerShell blocks activation | Open **Command Prompt** and use the Windows block from this guide. The main installation does not require activation. |
+| The song link is rejected | Use a link to one YouTube or YouTube Music song, not a playlist-only URL. |
+| Recommendations fail or the song is unsupported | Try another official music video or YouTube Music song link. No playlist or Google sign-in is started on failure. |
+| Fewer recommendations than requested are available | Choose a number within the displayed range. Link mode offers at most 200 per request and does not guarantee that many for every song. |
 | The CSV is not in the recent list | The list shows the ten newest `sidetrack-*.csv` files or `playlist.csv` in Downloads. Drag/paste another CSV file path into the prompt. |
 | The CSV cannot be read | Check the selected path and download CSV again if needed. In commands, quote paths containing spaces. |
 | Expected a `url` or `video_id` column | Download **CSV** from SideTrack. Renaming TXT to CSV does not convert it. |
@@ -357,14 +376,18 @@ These figures exclude recovery attempts and reads. The CLI reports the estimated
 
 ## Privacy and local files
 
-Google sign-in and API requests go directly between your computer and Google. SideTrack, Vercel, and this repository do not receive your Google password or authorization tokens. The tool uses the official YouTube Data API and does not download audio.
+Google sign-in and API requests go directly between your computer and Google. Song-link recommendations also run directly from your computer; the SideTrack website is not contacted. SideTrack, Vercel, and this repository do not receive your Google password or authorization tokens. The tool uses the official YouTube Data API and does not download audio.
 
 The default saved-login folder is:
 
 - **macOS/Linux:** `~/.playlistimporter/`
 - **Windows:** `%USERPROFILE%\.playlistimporter\`
 
-`token.json` is created in that folder after sign-in and lets the tool reuse the authorization. The main walkthrough keeps the separate `client_secret.json` in Downloads. Interactive mode checks the saved-login folder first, then Downloads, then asks for a path. Explicit commands without `--interactive` use the saved-login folder unless you pass `--client-secrets` or its environment variable.
+`token.json` is created in that folder after sign-in and lets the tool reuse the authorization. The main walkthrough keeps the separate `client_secret.json` in Downloads. Interactive mode checks the saved-login folder first, then Downloads, then asks for a path. Noninteractive commands use the saved-login folder unless you pass `--client-secrets` or its environment variable.
+
+After you confirm a song-link import, its selected tracks are saved under `imports/` inside the saved-login folder. These CSVs contain song titles, artists, and YouTube URLs, not login tokens. They let interrupted imports resume the same selection. They remain until you delete them; keep them while an import is unfinished. Cancelling at the song preview or using `--dry-run` does not save a file.
+
+Recommendations use experimental, unofficial [`ytmusicapi`](https://ytmusicapi.readthedocs.io/en/stable/reference/watch.html). YouTube Music can change, throttle, or reject its requests, and repeating a link may produce different songs. Filtering relies on metadata rather than audio analysis, so alternate recordings may remain. Playlist creation and insertion use the official YouTube Data API.
 
 **The token file is unencrypted.** On macOS/Linux, the tool creates a private folder and restricts token access to your user account. On Windows, protection depends on your user-profile folder permissions. Keep these files out of Git, shared folders, and cloud-synced folders. Someone with access to your account or computer may still be able to read them.
 
@@ -429,16 +452,24 @@ Providing a CSV path runs the original command-line flow without prompts. For ex
 playlist-importer "$HOME/Downloads/sidetrack-fJ9rUzIMcZQ-page-1.csv" --client-secrets "$HOME/Downloads/client_secret.json" --name "My discoveries"
 ```
 
-Replace the example filename with your actual download. With the main installation, use the full executable path from step 1. Add `--interactive` if you want the preview, confirmation, and sign-in recovery prompts while supplying file paths yourself. In a script or pipe, supply explicit CSV paths; interactive mode needs a terminal.
+Replace the example filename with your actual download. With the main installation, use the full executable path from step 1. Add `--interactive` if you want the preview, confirmation, and sign-in recovery prompts while supplying file paths yourself. For a song link, use `--url` and `--count` instead of CSV paths. For example, preview recommendations without Google sign-in:
+
+```sh
+sidetrack --url "https://music.youtube.com/watch?v=fJ9rUzIMcZQ" --count 40 --dry-run
+```
+
+In a terminal, a link command still asks for confirmation before a real import. In a script or pipe, supply explicit CSV paths or `--url`; `--url` defaults to 20 songs when `--count` is omitted. A requested count greater than the available recommendations fails before Google sign-in.
 
 ### Command options
 
 | Option | Purpose |
 | --- | --- |
-| `--name "Title"` | Name a new private playlist. Defaults to the first CSV's filename without its extension. |
+| `--name "Title"` | Name a new private playlist. Interactive mode asks; scripts use the CSV filename or `SideTrack recommendations` for a link. |
 | `--playlist URL_OR_ID` | Append to or resume an existing playlist you own. Use instead of `--name`. |
-| `--interactive` | Choose a CSV, ask for a name, preview, and confirm. Enabled automatically when started without CSV paths in a terminal. |
-| `--dry-run` | Validate input locally without Google access or changes. Does not check video availability, destination contents, or quota. |
+| `--url SONG_URL` | Generate similar songs from one YouTube or YouTube Music song. Use instead of CSV paths. |
+| `--count NUMBER` | Choose 1–200 recommendations for link mode, subject to availability. Interactive mode asks if omitted; scripts default to 20. |
+| `--interactive` | Choose a song link or CSV, ask for a name, preview, and confirm. Enabled automatically without CSV paths in a terminal. |
+| `--dry-run` | Preview without account sign-in or playlist changes. CSV previews are offline; song links contact YouTube Music. Does not check destination contents or remaining quota. |
 | `--client-secrets PATH` | Use a Desktop OAuth JSON file stored somewhere else. |
 | `--config-dir PATH` | Store the local login in a different private directory, e.g. for a second account. |
 | `--reauth` | Open browser sign-in again. |

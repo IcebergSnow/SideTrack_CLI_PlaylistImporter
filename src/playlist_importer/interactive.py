@@ -9,6 +9,44 @@ from pathlib import Path
 from .terminal import ask, progress
 
 
+def choose_source() -> str:
+    progress("1. Start from a YouTube / YouTube Music song link")
+    progress("2. Import a CSV download")
+    while True:
+        choice = ask("Choose 1 or 2 [Enter = 1]; q to cancel:").lower()
+        if choice == "q":
+            raise KeyboardInterrupt
+        if choice in {"", "1"}:
+            return "link"
+        if choice == "2":
+            return "csv"
+        progress("Enter 1 for a song link or 2 for a CSV.")
+
+
+def choose_link() -> str:
+    link = ask("Paste a YouTube or YouTube Music song link; q to cancel:")
+    if link.lower() == "q":
+        raise KeyboardInterrupt
+    return link
+
+
+def choose_count(available: int) -> int:
+    default = min(20, available)
+    while True:
+        value = ask(f"How many videos? 1–{available} [Enter = {default}]; q to cancel:")
+        if value.lower() == "q":
+            raise KeyboardInterrupt
+        if not value:
+            return default
+        try:
+            count = int(value)
+        except ValueError:
+            count = 0
+        if 1 <= count <= available:
+            return count
+        progress(f"Enter a whole number between 1 and {available}.")
+
+
 def recent_downloads(directory: Path) -> list[Path]:
     candidates = []
     try:
@@ -77,6 +115,8 @@ def choose_title() -> str:
 
 
 def confirm_import(args, source, title: str, identifier: str | None) -> bool:
+    if args.url is not None:
+        progress(f"Starting song: {args.url}")
     for path in args.files:
         progress(f"File: {path.resolve()}")
     progress("Song preview:")

@@ -10,8 +10,10 @@ from pathlib import Path
 from . import __version__
 from .auth import authenticate, logout
 from .errors import ImporterError, InputError, PlaylistConflict, ReauthenticationRequired
-from .files import playlist_id, read_csvs
-from .interactive import choose_client, choose_csv, choose_title, confirm_import
+from .files import ImportFile, Track, playlist_id, read_csvs
+from .interactive import choose_client, choose_count, choose_csv, choose_link, choose_source, choose_title, confirm_import
+from .recommendations import POOL_TARGET, recommend
+from .snapshots import save_song_list
 from .terminal import ask, progress, safe_text
 from .youtube import YouTube
 
@@ -20,13 +22,15 @@ RECHECK_DELAY = 2
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description="Import SideTrack CSV files into a private YouTube playlist. Google sign-in runs locally.")
+    result = argparse.ArgumentParser(description="Create a private YouTube playlist from a song link or SideTrack CSV files. Google sign-in runs locally.")
     result.add_argument("files", nargs="*", type=Path, metavar="CSV", help="one or more CSVs with url or video_id columns")
+    result.add_argument("--url", help="generate recommendations directly from one YouTube or YouTube Music song link")
+    result.add_argument("--count", type=int, help="number of recommendations for --url (1–200; prompts in interactive mode, otherwise defaults to 20)")
     target = result.add_mutually_exclusive_group()
-    target.add_argument("--name", help="new private playlist title (default: first CSV filename)")
+    target.add_argument("--name", help="new private playlist title (prompts interactively; otherwise defaults to the CSV filename or SideTrack recommendations)")
     target.add_argument("--playlist", help="append/resume into an existing playlist ID or URL, skipping videos already there")
-    result.add_argument("--dry-run", action="store_true", help="validate and list input without login, network access or writes")
-    result.add_argument("--interactive", action="store_true", help="choose a download, name the playlist and confirm (automatic with no CSV in a terminal)")
+    result.add_argument("--dry-run", action="store_true", help="preview without Google sign-in or playlist writes (song links contact YouTube Music; CSVs stay offline)")
+    result.add_argument("--interactive", action="store_true", help="choose a song link or CSV, name the playlist and confirm (automatic with no CSV in a terminal)")
     result.add_argument("--client-secrets", type=Path, default=os.environ.get("PLAYLIST_IMPORTER_CLIENT_SECRETS"), help="Google Desktop OAuth JSON path (or PLAYLIST_IMPORTER_CLIENT_SECRETS)")
     result.add_argument("--config-dir", type=Path, default=os.environ.get("PLAYLIST_IMPORTER_CONFIG_DIR", str(Path.home() / ".playlistimporter")), help="private token directory (default: ~/.playlistimporter)")
     result.add_argument("--reauth", action="store_true", help="open Google sign-in again, e.g. to switch channels")
@@ -85,7 +89,7 @@ def run(args) -> int:
     if args.client_secrets:
         args.client_secrets = args.client_secrets.expanduser()
     if args.logout:
-        if args.files or args.name or args.playlist or args.dry_run or args.reauth or args.interactive:
+        if args.files or args.name or args.playlist or args.dry_run or args.reauth or args.interactive or args.url is not None or args.count is not None:
             raise InputError("Use --logout by itself (optionally with --config-dir).")
         removed = logout(args.config_dir)
         progress("Removed the local login." if removed else "No saved local login was found.")
@@ -93,27 +97,57 @@ def run(args) -> int:
         return 0
     interactive = args.interactive or (not args.files and sys.stdin.isatty())
     if interactive and not sys.stdin.isatty():
-        raise InputError("Interactive mode needs a terminal. Provide CSV paths directly for scripts.")
-    if interactive and not args.files:
-        args.files = [choose_csv()]
-    if not args.files:
-        raise InputError("Provide a CSV file. Use --help for usage or --logout to remove your local login.")
-    args.files = [path.expanduser() for path in args.files]
-    source = read_csvs(args.files)
+        raise InputError("Interactive mode needs a terminal. Provide CSV paths or --url directly for scripts.")
+    if args.url is not None and args.files:
+        raise InputError("Choose either CSV files or --url, not both.")
+    if args.count is not None and not 1 <= args.count <= POOL_TARGET:
+        raise InputError(f"--count must be between 1 and {POOL_TARGET}.")
+    if interactive and not args.files and args.url is None:
+        if choose_source() == "link":
+            args.url = choose_link()
+        else:
+            args.files = [choose_csv()]
+    if args.count is not None and args.url is None:
+        raise InputError("--count is only used with a song link; CSV imports use all unique rows.")
     identifier = playlist_id(args.playlist) if args.playlist else None
+    if args.url is not None:
+        progress("Checking the song and finding similar music. This may take a moment...")
+        recommendations = recommend(args.url)
+        available = len(recommendations["tracks"])
+        seed = recommendations["seed"]
+        progress(f"Starting song: {', '.join(seed['artists'])} - {seed['title']}")
+        progress(f"Found {available} unique recommendations; the starting song is excluded.")
+        count = args.count if args.count is not None else (choose_count(available) if interactive else 20)
+        if count > available:
+            raise InputError(f"Only {available} unique recommendations were available. Try again with --count {available} or a smaller number.")
+        source = ImportFile([
+            Track(track["video_id"], track["title"], ", ".join(track["artists"]))
+            for track in recommendations["tracks"][:count]
+        ], duplicates=0)
+    else:
+        if not args.files:
+            raise InputError("Provide a CSV file or --url. Run sidetrack in a terminal for the guided menu.")
+        args.files = [path.expanduser() for path in args.files]
+        source = read_csvs(args.files)
     if interactive and not args.dry_run and not identifier and args.name is None:
         args.name = choose_title()
-    title = args.name if args.name is not None else args.files[0].stem
+    title = args.name if args.name is not None else (args.files[0].stem if args.files else "SideTrack recommendations")
     if not identifier and (not title.strip() or len(title) > 150 or any(unicodedata.category(c).startswith("C") for c in title)):
         raise InputError("Use a playlist name with 1–150 characters and no control characters.")
-    progress(f"Loaded {len(source.tracks)} unique videos; removed {source.duplicates} duplicate rows.")
+    if args.url is not None:
+        progress(f"Selected {len(source.tracks)} unique recommendations.")
+    else:
+        progress(f"Loaded {len(source.tracks)} unique videos; removed {source.duplicates} duplicate rows.")
     if args.dry_run:
         for index, track in enumerate(source.tracks, 1):
             print(safe_text(f"{index}. {track.video_id}  {track.artist} - {track.title}"))
         progress(f"Estimated write quota: {50 * (len(source.tracks) + (not identifier)):,} units; reads add a small amount.")
         if identifier:
-            progress("Dry run is offline: videos already in the destination will be checked only during a real import.")
-        progress("Dry run complete. No login, network requests, token files or playlists were created.")
+            progress("Videos already in the destination will be checked only during a real import.")
+        if args.url is not None:
+            progress("Preview complete. Recommendations came from YouTube Music; no Google sign-in, saved song lists or playlist writes occurred.")
+        else:
+            progress("Dry run complete. No login, network requests, token files or playlists were created.")
         return 0
     if interactive:
         if not confirm_import(args, source, title, identifier):
@@ -121,6 +155,9 @@ def run(args) -> int:
             return 0
         if args.client_secrets is None:
             args.client_secrets = choose_client(args.config_dir)
+    if args.url is not None:
+        args.files = [save_song_list(source, args.config_dir)]
+        progress(f"Saved this exact song list for recovery: {args.files[0]}")
     client_path = args.client_secrets or args.config_dir / "client_secret.json"
     try:
         credentials = authenticate(client_path, args.config_dir, args.reauth)

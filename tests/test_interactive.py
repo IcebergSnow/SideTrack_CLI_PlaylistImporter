@@ -87,7 +87,7 @@ def test_default_mode_shows_file_and_preview_before_auth(home, monkeypatch, api,
     path = csv_at(home / "Downloads/sidetrack-original-name (2).csv")
     client = home / "Downloads/client_secret.json"
     client.write_text("test-only")
-    answers(monkeypatch, "", "New music", "yes")
+    answers(monkeypatch, "2", "", "New music", "yes")
     assert cli.main([]) == 0
     cli.authenticate.assert_called_once_with(client, home / ".playlistimporter", False)
     api.create_playlist.assert_called_once_with("New music")
@@ -101,7 +101,7 @@ def test_default_mode_shows_file_and_preview_before_auth(home, monkeypatch, api,
 @pytest.mark.parametrize("confirmation", ["", "n", "something else"])
 def test_declining_confirmation_prevents_login_and_writes(home, monkeypatch, api, confirmation):
     csv_at(home / "Downloads/sidetrack-song.csv")
-    answers(monkeypatch, "", "Test playlist", confirmation)
+    answers(monkeypatch, "2", "", "Test playlist", confirmation)
     assert cli.main([]) == 0
     cli.authenticate.assert_not_called()
     cli.YouTube.assert_not_called()
@@ -110,7 +110,7 @@ def test_declining_confirmation_prevents_login_and_writes(home, monkeypatch, api
 
 def test_invalid_csv_fails_before_auth_or_playlist_creation(home, monkeypatch, api):
     (home / "Downloads/sidetrack-bad.csv").write_text("title\nMissing ID\n")
-    answers(monkeypatch, "")
+    answers(monkeypatch, "2", "")
     assert cli.main([]) == 2
     cli.authenticate.assert_not_called()
     cli.YouTube.assert_not_called()
@@ -118,7 +118,7 @@ def test_invalid_csv_fails_before_auth_or_playlist_creation(home, monkeypatch, a
 
 def test_interactive_dry_run_needs_no_credentials_confirmation_or_auth(home, monkeypatch, api, capsys):
     csv_at(home / "Downloads/sidetrack-song.csv")
-    answers(monkeypatch, "")
+    answers(monkeypatch, "2", "")
     assert cli.main(["--dry-run"]) == 0
     cli.authenticate.assert_not_called()
     assert "Dry run complete" in capsys.readouterr().err
@@ -201,7 +201,7 @@ def test_interactive_resume_preserves_destination_and_skips_existing(home, monke
     path.write_text(f"video_id\n{A}\n{B}\n")
     (home / "Downloads/client_secret.json").write_text("test-only")
     api.video_ids.return_value = {A}
-    answers(monkeypatch, "", "y")
+    answers(monkeypatch, "2", "", "y")
     assert cli.main(["--playlist", PLAYLIST]) == 0
     api.create_playlist.assert_not_called()
     api.add_video.assert_called_once_with(PLAYLIST, B)

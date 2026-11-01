@@ -17,11 +17,23 @@ The automated tests cover CSV parsing, duplicate removal, OAuth setup, token han
 
 ## Interactive mode
 
-Starting with no CSV paths in a terminal opens the walkthrough. `--interactive` also enables it for explicit paths. Nonterminal invocations must provide CSV paths. Prompts and progress go to stderr; stdout remains available for the playlist URL or dry-run song list.
+Starting with no CSV paths in a terminal opens a choice of song link or CSV. `--url` selects link mode directly. `--interactive` also enables it for explicit paths. Nonterminal invocations must provide CSV paths or `--url`. Prompts and progress go to stderr; stdout remains available for the playlist URL or dry-run song list.
 
-Discovery lists at most ten recent `sidetrack-*.csv` downloads or `playlist.csv`, using modification time. A manually entered path supports other locations and filenames. Every selected CSV is validated before sign-in. Real imports require confirmation; dry runs never authenticate.
+Discovery lists at most ten recent `sidetrack-*.csv` downloads or `playlist.csv`, using modification time. A manually entered path supports other locations and filenames. Every selected CSV is validated before sign-in. Link mode fetches a recommendation pool before asking for a count, and enforces the available count without another recommendation request. Real interactive imports require confirmation; dry runs never authenticate.
 
-If refreshing a cached login raises `RefreshError`, or the cached client/scopes do not match, interactive mode offers one browser authorization attempt. Other failures, including private-file permission checks, retain their existing error handling. No new preferences or credentials are stored by the walkthrough.
+If refreshing a cached login raises `RefreshError`, or the cached client/scopes do not match, interactive mode offers one browser authorization attempt. Other failures, including private-file permission checks, retain their existing error handling. No preferences or credentials are stored by the walkthrough itself. Confirmed link imports save a private CSV under the config directory's `imports/` folder before authentication, so resume commands use the exact selected IDs. Dry runs and cancellations before import confirmation do not save lists.
+
+## Direct recommendations
+
+`recommendations.py` adapts SideTrack's recommendation filtering for local use with `ytmusicapi==1.12.3`; it does not call the hosted website. `get_watch_playlist(videoId=..., radio=True, limit=200)` requests a candidate pool. The library may return more raw candidates because its limit is a minimum target. Filtering caps the result at 200 and excludes the seed, duplicate IDs, known counterparts, and normalized artist/title duplicates while retaining live/acoustic/remix qualifiers.
+
+A short result can make one additional radio request. The operation is bounded by a 35-second budget checked before requests, at most 16 underlying HTTP requests, and at most 10 seconds per connect/read timeout. Failures are reported without sample fallback data. Unit tests cover error handling and filtering; live checks can be run with:
+
+```sh
+sidetrack --url "https://music.youtube.com/watch?v=fJ9rUzIMcZQ" --count 20 --dry-run
+```
+
+This contacts YouTube Music but does not authenticate, save a list, or create a playlist.
 
 ## Conflict recovery
 
@@ -35,8 +47,8 @@ Tests cover delayed playlist reads, repeated conflicts, explicit duplicate respo
 
 Use a Google account and Desktop OAuth client configured according to the user guide. Real imports modify that account and consume API quota.
 
-1. Follow the [import instructions](../README.md#3-import-your-first-playlist), substituting the checkout's `examples/playlist.csv` for the input file.
+1. Follow the [import instructions](../README.md#3-import-your-first-playlist), choosing CSV mode and using the checkout's `examples/playlist.csv` as the input file.
 2. Wait for the completion message, then open the resulting playlist. Check that it is private and contains the two example videos in CSV order.
 3. Rerun with the same CSV and `--playlist` set to that playlist's URL. Confirm that zero new videos are added.
 
-A dry run checks local input only. Passing automated tests does not verify Google authorization, current video availability, or live API behavior.
+A CSV dry run checks local input only; a link dry run also exercises the live recommendation API. Passing automated tests does not verify Google authorization, current video availability, or live API behavior.
