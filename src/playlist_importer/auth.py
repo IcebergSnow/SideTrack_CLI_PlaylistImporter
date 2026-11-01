@@ -11,13 +11,13 @@ from functools import partial
 from pathlib import Path
 
 import requests
-from google.auth.exceptions import GoogleAuthError
+from google.auth.exceptions import GoogleAuthError, RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from oauthlib.oauth2 import OAuth2Error
 
-from .errors import ImporterError
+from .errors import ImporterError, ReauthenticationRequired
 
 SCOPES = ["https://www.googleapis.com/auth/youtube"]
 TOKEN_URI = "https://oauth2.googleapis.com/token"
@@ -111,14 +111,17 @@ def authenticate(client_path: Path, directory: Path, reauth: bool = False) -> Cr
     try:
         if cached:
             if cached.get("client_id") != config["installed"]["client_id"] or cached.get("scopes") != SCOPES:
-                raise ImporterError("The cached login belongs to a different OAuth client or permissions. Run again with --reauth.")
+                raise ReauthenticationRequired("The cached login belongs to a different OAuth client or permissions. Run again with --reauth.")
             # Rebuild from known fields; token refresh always goes to Google's endpoint.
             cached = {key: cached.get(key) for key in ("token", "refresh_token", "expiry")}
             cached.update(config["installed"], scopes=SCOPES)
             credentials = Credentials.from_authorized_user_info(cached, SCOPES)
             if not credentials.valid:
                 with requests.Session() as session:
-                    credentials.refresh(BoundedRequest(session=session))
+                    try:
+                        credentials.refresh(BoundedRequest(session=session))
+                    except RefreshError as exc:
+                        raise ReauthenticationRequired("The saved Google login could not be refreshed. Run again with --reauth to sign in.") from exc
         else:
             flow = InstalledAppFlow.from_client_config(config, SCOPES, autogenerate_code_verifier=True)
             flow.oauth2session.request = partial(flow.oauth2session.request, timeout=30)

@@ -6,6 +6,10 @@ class InputError(ImporterError):
     pass
 
 
+class ReauthenticationRequired(ImporterError):
+    """The cached login needs a new browser authorization."""
+
+
 class PlaylistConflict(ImporterError):
     """A conflict that may be recoverable after reading the destination."""
 

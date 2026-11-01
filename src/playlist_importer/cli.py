@@ -9,21 +9,14 @@ from pathlib import Path
 
 from . import __version__
 from .auth import authenticate, logout
-from .errors import ImporterError, InputError, PlaylistConflict
+from .errors import ImporterError, InputError, PlaylistConflict, ReauthenticationRequired
 from .files import playlist_id, read_csvs
+from .interactive import choose_client, choose_csv, choose_title, confirm_import
+from .terminal import ask, progress, safe_text
 from .youtube import YouTube
 
 CONFLICT_DELAYS = (5, 10, 20)
 RECHECK_DELAY = 2
-
-
-def safe_text(value: str) -> str:
-    """Untrusted CSV/API metadata must not inject terminal escape sequences."""
-    return " ".join("".join(c if not unicodedata.category(c).startswith("C") else " " for c in str(value)).split())
-
-
-def progress(message: str) -> None:
-    print(safe_text(message), file=sys.stderr, flush=True)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -33,6 +26,7 @@ def parser() -> argparse.ArgumentParser:
     target.add_argument("--name", help="new private playlist title (default: first CSV filename)")
     target.add_argument("--playlist", help="append/resume into an existing playlist ID or URL, skipping videos already there")
     result.add_argument("--dry-run", action="store_true", help="validate and list input without login, network access or writes")
+    result.add_argument("--interactive", action="store_true", help="choose a download, name the playlist and confirm (automatic with no CSV in a terminal)")
     result.add_argument("--client-secrets", type=Path, default=os.environ.get("PLAYLIST_IMPORTER_CLIENT_SECRETS"), help="Google Desktop OAuth JSON path (or PLAYLIST_IMPORTER_CLIENT_SECRETS)")
     result.add_argument("--config-dir", type=Path, default=os.environ.get("PLAYLIST_IMPORTER_CONFIG_DIR", str(Path.home() / ".playlistimporter")), help="private token directory (default: ~/.playlistimporter)")
     result.add_argument("--reauth", action="store_true", help="open Google sign-in again, e.g. to switch channels")
@@ -91,17 +85,24 @@ def run(args) -> int:
     if args.client_secrets:
         args.client_secrets = args.client_secrets.expanduser()
     if args.logout:
-        if args.files or args.name or args.playlist or args.dry_run or args.reauth:
+        if args.files or args.name or args.playlist or args.dry_run or args.reauth or args.interactive:
             raise InputError("Use --logout by itself (optionally with --config-dir).")
         removed = logout(args.config_dir)
         progress("Removed the local login." if removed else "No saved local login was found.")
         progress("To revoke access at Google too, visit https://myaccount.google.com/connections .")
         return 0
+    interactive = args.interactive or (not args.files and sys.stdin.isatty())
+    if interactive and not sys.stdin.isatty():
+        raise InputError("Interactive mode needs a terminal. Provide CSV paths directly for scripts.")
+    if interactive and not args.files:
+        args.files = [choose_csv()]
     if not args.files:
         raise InputError("Provide a CSV file. Use --help for usage or --logout to remove your local login.")
     args.files = [path.expanduser() for path in args.files]
     source = read_csvs(args.files)
     identifier = playlist_id(args.playlist) if args.playlist else None
+    if interactive and not args.dry_run and not identifier and args.name is None:
+        args.name = choose_title()
     title = args.name if args.name is not None else args.files[0].stem
     if not identifier and (not title.strip() or len(title) > 150 or any(unicodedata.category(c).startswith("C") for c in title)):
         raise InputError("Use a playlist name with 1–150 characters and no control characters.")
@@ -114,7 +115,22 @@ def run(args) -> int:
             progress("Dry run is offline: videos already in the destination will be checked only during a real import.")
         progress("Dry run complete. No login, network requests, token files or playlists were created.")
         return 0
-    credentials = authenticate(args.client_secrets or args.config_dir / "client_secret.json", args.config_dir, args.reauth)
+    if interactive:
+        if not confirm_import(args, source, title, identifier):
+            progress("Cancelled. No Google sign-in or playlist changes were made.")
+            return 0
+        if args.client_secrets is None:
+            args.client_secrets = choose_client(args.config_dir)
+    client_path = args.client_secrets or args.config_dir / "client_secret.json"
+    try:
+        credentials = authenticate(client_path, args.config_dir, args.reauth)
+    except ReauthenticationRequired:
+        if not interactive or args.reauth:
+            raise
+        if ask("Your saved login needs authorization again. Open Google sign-in? [Y/n]:").lower() not in {"", "y", "yes"}:
+            progress("Cancelled. No playlist changes were made.")
+            return 0
+        credentials = authenticate(client_path, args.config_dir, True)
     youtube = YouTube(credentials)
     try:
         channel = youtube.channel()

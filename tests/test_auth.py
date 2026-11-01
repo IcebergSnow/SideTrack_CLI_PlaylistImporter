@@ -9,7 +9,7 @@ from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 
 from playlist_importer import auth
-from playlist_importer.errors import ImporterError
+from playlist_importer.errors import ImporterError, ReauthenticationRequired
 
 
 @pytest.fixture
@@ -85,7 +85,7 @@ def test_refresh_failure_does_not_leak_exception_or_replace_cache(monkeypatch, t
     def fail(*args, **kwargs):
         raise RefreshError("sensitive-test-token")
     monkeypatch.setattr(Credentials, "refresh", fail)
-    with pytest.raises(ImporterError, match="--reauth") as error:
+    with pytest.raises(ReauthenticationRequired, match="--reauth") as error:
         auth.authenticate(client, directory)
     assert "sensitive-test-token" not in str(error.value)
     assert path.read_bytes() == before

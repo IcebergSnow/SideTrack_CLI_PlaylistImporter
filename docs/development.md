@@ -13,7 +13,15 @@ playlist-importer examples/playlist.csv --dry-run
 python -m build
 ```
 
-The automated tests cover CSV parsing, duplicate removal, OAuth setup, token handling, API requests, and recovery from partial failures. CI runs on macOS, Windows, and Linux. Test doubles are confined to tests; real imports use Google's API.
+The automated tests cover CSV parsing, duplicate removal, OAuth setup, token handling, API requests, and recovery from partial failures, and interactive file selection, confirmation, cancellation, and sign-in recovery. CI runs on macOS, Windows, and Linux. Test doubles are confined to tests; real imports use Google's API.
+
+## Interactive mode
+
+Starting with no CSV paths in a terminal opens the walkthrough. `--interactive` also enables it for explicit paths. Nonterminal invocations must provide CSV paths. Prompts and progress go to stderr; stdout remains available for the playlist URL or dry-run song list.
+
+Discovery lists at most ten recent `sidetrack-*.csv` downloads or `playlist.csv`, using modification time. A manually entered path supports other locations and filenames. Every selected CSV is validated before sign-in. Real imports require confirmation; dry runs never authenticate.
+
+If refreshing a cached login raises `RefreshError`, or the cached client/scopes do not match, interactive mode offers one browser authorization attempt. Other failures, including private-file permission checks, retain their existing error handling. No new preferences or credentials are stored by the walkthrough.
 
 ## Conflict recovery
 
